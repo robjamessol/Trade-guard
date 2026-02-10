@@ -1,0 +1,544 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradeGuard v7.0 — Strategy Script
+// Script 2 of 2: Full backtesting strategy with entry signals, 4-stage R-based exit system,
+//                capitulation entries/exits, position sizing, trailing stops
+
+//@version=6
+strategy("TradeGuard v7.0 Strategy", overlay=true, default_qty_type=strategy.fixed, default_qty_value=1, initial_capital=450000, commission_type=strategy.commission.percent, commission_value=0.0, slippage=1, pyramiding=3, max_labels_count=500, max_lines_count=500)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GROUP: Account Settings
+// ═══════════════════════════════════════════════════════════════════════════════
+grp_acct = "Account Settings"
+i_account_nav      = input.float(450000, "Account NAV ($)",             group=grp_acct, minval=1000)
+i_risk_trend_pct   = input.float(1.0,    "Risk per TREND trade (%)",    group=grp_acct, minval=0.1, maxval=5.0, step=0.1)
+i_risk_cap_pct     = input.float(0.5,    "Risk per CAP trade (%)",      group=grp_acct, minval=0.1, maxval=2.0, step=0.1)
+i_max_pos_pct      = input.float(20.0,   "Max position (% NAV)",        group=grp_acct, minval=1.0, maxval=50.0, step=0.5)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GROUP: Entry Settings
+// ═══════════════════════════════════════════════════════════════════════════════
+grp_entry = "Entry Settings"
+i_sector_etf       = input.symbol("XLK", "Sector ETF for RS",             group=grp_entry)
+i_min_template     = input.int(7,        "Min Template Score",             group=grp_entry, minval=1, maxval=8)
+i_min_score        = input.int(9,        "Min Go/No-Go Score",             group=grp_entry, minval=1, maxval=12)
+i_min_rr           = input.float(3.0,    "Min R:R Ratio",                  group=grp_entry, minval=1.0, maxval=10.0, step=0.5)
+i_enable_trend     = input.bool(true,    "Enable TREND entries",           group=grp_entry)
+i_enable_cap       = input.bool(true,    "Enable CAPITULATION entries",    group=grp_entry)
+i_enable_scaling   = input.bool(true,    "Enable Scaling (Confirm/Load)",  group=grp_entry)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GROUP: Stop Settings
+// ═══════════════════════════════════════════════════════════════════════════════
+grp_stop = "Stop Settings"
+i_max_stop_pct     = input.float(8.0,    "Max Stop Distance (%)",       group=grp_stop, minval=1.0, maxval=20.0, step=0.5)
+i_atr_low_mult     = input.float(2.0,    "ATR Low-Vol Multiplier",      group=grp_stop, minval=1.0, maxval=5.0, step=0.25)
+i_atr_high_mult    = input.float(2.5,    "ATR High-Vol Multiplier",     group=grp_stop, minval=1.0, maxval=5.0, step=0.25)
+i_atr_vol_thresh   = input.float(4.0,    "ATR Volatility Threshold (%)",group=grp_stop, minval=1.0, maxval=10.0, step=0.5)
+i_time_stop_bars   = input.int(10,       "Time Stop (bars)",             group=grp_stop, minval=3, maxval=30)
+i_cap_time_stop    = input.int(5,        "CAP Time Stop (bars)",         group=grp_stop, minval=2, maxval=15)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GROUP: Display Settings
+// ═══════════════════════════════════════════════════════════════════════════════
+grp_disp = "Display Settings"
+i_show_ma          = input.bool(true,  "Show MA Lines",            group=grp_disp)
+i_show_supertrend  = input.bool(true,  "Show SuperTrend Lines",    group=grp_disp)
+i_show_trail_stop  = input.bool(true,  "Show Trailing Stop Line",  group=grp_disp)
+i_show_stage_label = input.bool(true,  "Show Stage Labels",        group=grp_disp)
+i_show_info_table  = input.bool(true,  "Show Info Table",          group=grp_disp)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: CORE INDICATOR CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// --- Moving Averages ---
+sma50   = ta.sma(close, 50)
+sma150  = ta.sma(close, 150)
+sma200  = ta.sma(close, 200)
+ema21   = ta.ema(close, 21)
+ema200  = ta.ema(close, 200)
+sma5    = ta.sma(close, 5)
+
+// --- SuperTrend (Daily) ---
+[st_line_d, st_dir_d] = ta.supertrend(3.0, 14)
+st_bull_d = st_dir_d < 0
+
+// --- SuperTrend (Weekly) ---
+[st_line_w, st_dir_w] = request.security(syminfo.tickerid, "W", ta.supertrend(3.0, 10))
+st_bull_w = st_dir_w < 0
+
+// --- ADX ---
+[di_plus, di_minus, adx_val] = ta.dmi(14, 14)
+
+// --- RSI(2) ---
+rsi2 = ta.rsi(close, 2)
+
+// --- ATR(14) ---
+atr_val = ta.atr(14)
+atr_pct = atr_val / close * 100
+
+// --- Volume ---
+vol_sma50     = ta.sma(volume, 50)
+vol_ratio     = volume / vol_sma50
+vol_breakout  = vol_ratio >= 1.4
+vol_declining = ta.sma(volume, 10) < vol_sma50 * 0.8
+
+// --- VWAP ---
+vwap_val = ta.vwap
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: REGIME (via request.security)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+spy_close    = request.security("SPY", "D", close)
+spy_sma200   = request.security("SPY", "D", ta.sma(close, 200))
+vix_close    = request.security("TVC:VIX", "D", close)
+breadth      = request.security("INDEX:S5TH", "D", close)
+hy_oas       = request.security("FRED:BAMLH0A0HYM2", "D", close)
+
+spy_above_200   = spy_close > spy_sma200
+vix_low         = vix_close < 20
+vix_high_regime = vix_close > 30
+breadth_strong  = breadth > 50
+breadth_weak    = breadth < 30
+hy_safe         = na(hy_oas) ? true : hy_oas < 5
+hy_danger       = na(hy_oas) ? false : hy_oas > 6
+
+regime_green  = spy_above_200 and vix_low and breadth_strong and hy_safe
+regime_red    = vix_high_regime or hy_danger or breadth_weak
+regime_yellow = not regime_green and not regime_red
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: MINERVINI TREND TEMPLATE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+low_52w  = ta.lowest(low, 252)
+high_52w = ta.highest(high, 252)
+
+spy_close_d   = request.security("SPY", "D", close)
+stock_6m_ret  = (close - close[126]) / close[126] * 100
+spy_6m_ret    = (spy_close_d - spy_close_d[126]) / spy_close_d[126] * 100
+stock_rs_raw  = stock_6m_ret - spy_6m_ret
+rs_score      = math.max(0, math.min(99, math.round(50 + stock_rs_raw * 1.65)))
+
+t1 = close > sma150 and close > sma200
+t2 = sma150 > sma200
+t3 = sma200 > nz(sma200[100])
+t4 = sma50 > sma150 and sma50 > sma200
+t5 = close > sma50
+t6 = close >= 1.25 * low_52w
+t7 = close >= 0.75 * high_52w
+t8 = rs_score >= 70
+
+template_score = (t1 ? 1 : 0) + (t2 ? 1 : 0) + (t3 ? 1 : 0) + (t4 ? 1 : 0) + (t5 ? 1 : 0) + (t6 ? 1 : 0) + (t7 ? 1 : 0) + (t8 ? 1 : 0)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: SECTOR RS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+sector_close   = request.security(i_sector_etf, "D", close)
+sector_2w_ret  = (sector_close - sector_close[10]) / sector_close[10] * 100
+spy_2w_ret     = (spy_close_d - spy_close_d[10]) / spy_close_d[10] * 100
+sector_rs_st   = sector_2w_ret - spy_2w_ret
+sector_3m_ret  = (sector_close - sector_close[63]) / sector_close[63] * 100
+spy_3m_ret     = (spy_close_d - spy_close_d[63]) / spy_close_d[63] * 100
+sector_rs      = sector_3m_ret - spy_3m_ret
+sector_rs_score = math.max(0, math.min(100, math.round(50 + sector_rs * 5)))
+sector_strong   = sector_rs_score > 75
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: ENTRY SIGNAL DETECTION
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// --- Pullback to 21-EMA ---
+pullback_touch  = low <= ema21 and close > ema21
+bullish_candle  = close > open and close > (high + low) / 2
+pullback_signal = pullback_touch and bullish_candle and template_score >= i_min_template
+
+// --- VCP Detection ---
+range_current = ta.highest(high, 10) - ta.lowest(low, 10)
+range_prior   = ta.highest(high[10], 20) - ta.lowest(low[10], 20)
+contracting   = range_current < range_prior * 0.6
+vcp_setup     = contracting and vol_declining and template_score >= i_min_template
+pivot_high    = ta.highest(high, 10)
+vcp_breakout  = ta.crossover(close, pivot_high[1]) and vol_breakout
+
+// --- VWAP Retest ---
+vwap_touch   = low <= vwap_val * 1.005 and low >= vwap_val * 0.995
+vwap_reclaim = close > vwap_val and close > open
+vwap_signal  = vwap_touch and vwap_reclaim and template_score >= i_min_template
+
+// --- Post-Earnings Gap ---
+gap_up       = open > close[1] * 1.03
+huge_volume  = volume > vol_sma50 * 2.0
+earnings_gap = gap_up and huge_volume
+
+// --- RSI(2) Capitulation ---
+spy_above_200_d = request.security("SPY", "D", close > ta.sma(close, 200))
+price_above_200 = close > sma200
+vix_high_cap    = vix_close > 30
+reversal_candle = close > open and close > (high + low) / 2
+cap_entry       = rsi2 < 5 and price_above_200 and vix_high_cap and template_score >= 6 and reversal_candle
+
+// --- Anti-Chase Filters ---
+extended_21ema = close > ema21 * 1.10
+extended_50sma = close > sma50 * 1.15
+consec_green   = close > open and close[1] > open[1] and close[2] > open[2] and close[3] > open[3] and close[4] > open[4]
+past_pivot     = close > pivot_high[1] * 1.05
+entry_blocked  = extended_21ema or extended_50sma or consec_green or past_pivot
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: GO/NO-GO SCORECARD (for entry qualification)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+pts_regime    = regime_green ? 2 : regime_yellow ? 1 : 0
+pts_trend     = (st_bull_d ? 1 : 0) + (st_bull_w ? 1 : 0)
+pts_sector    = sector_strong ? 1 : 0
+has_pattern   = pullback_signal or vcp_setup or vwap_signal or earnings_gap
+pts_setup     = (template_score >= 8 ? 1 : 0) + (has_pattern ? 1 : 0)
+pts_catalyst  = earnings_gap ? 1 : 0
+
+// R:R calculation for scoring
+stop_mult_sc  = atr_pct <= i_atr_vol_thresh ? i_atr_low_mult : i_atr_high_mult
+raw_stop_sc   = close - (stop_mult_sc * atr_val)
+max_stop_sc   = close * (1 - i_max_stop_pct / 100)
+stop_sc       = math.max(raw_stop_sc, max_stop_sc)
+r_per_share_sc = close - stop_sc
+rr_ratio_sc   = r_per_share_sc > 0 ? (high_52w - close) / r_per_share_sc : 0
+pts_rr        = rr_ratio_sc >= 5 ? 2 : rr_ratio_sc >= 3 ? 1 : 0
+
+not_extended  = not extended_21ema and not extended_50sma
+pts_extension = not_extended ? 1 : 0
+pts_portfolio = adx_val > 25 ? 1 : 0
+
+total_score   = pts_regime + pts_trend + pts_sector + pts_setup + pts_catalyst + pts_rr + pts_extension + pts_portfolio
+
+// Conviction tier
+tier_a_plus = template_score == 8 and st_bull_w and st_bull_d and adx_val > 25 and sector_strong
+tier_a      = template_score == 8 and st_bull_d and (vcp_breakout or pullback_signal) and sector_rs_score > 50
+tier_b      = template_score >= 7 and st_bull_d
+conviction  = tier_a_plus ? "A+" : tier_a ? "A" : tier_b ? "B" : "None"
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: POSITION SIZING CALCULATIONS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+stop_mult_calc  = atr_pct <= i_atr_vol_thresh ? i_atr_low_mult : i_atr_high_mult
+raw_stop_calc   = close - (stop_mult_calc * atr_val)
+max_stop_lim    = close * (1 - i_max_stop_pct / 100)
+initial_stop    = math.max(raw_stop_calc, max_stop_lim)
+r_value         = close - initial_stop
+
+// TREND sizing
+risk_dollars_trend = i_account_nav * (i_risk_trend_pct / 100)
+shares_probe       = r_value > 0 ? math.floor(risk_dollars_trend / r_value) : 0
+shares_target      = math.floor(shares_probe / 0.5)
+shares_confirm     = math.floor(shares_target * 0.30)
+shares_load        = shares_target - shares_probe - shares_confirm
+
+// Cap on max position
+max_shares_nav  = math.floor((i_account_nav * i_max_pos_pct / 100) / close)
+shares_probe    := math.min(shares_probe, max_shares_nav)
+shares_target   := math.min(shares_target, max_shares_nav)
+
+// CAP sizing
+risk_dollars_cap = i_account_nav * (i_risk_cap_pct / 100)
+cap_stop_dist    = close * 0.08
+cap_shares       = cap_stop_dist > 0 ? math.floor(risk_dollars_cap / cap_stop_dist) : 0
+
+// Confirm/Load price triggers
+confirm_trigger = close * 1.025
+load_trigger    = close * 1.05
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: TRADE STATE MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var int   trade_mode       = 0       // 0=flat, 1=TREND, 2=CAP
+var float trade_entry      = na
+var float trade_stop       = na
+var float trade_r          = na
+var int   trade_stage      = 0       // 1=initial, 2=breakeven, 3=trailing, 4=wide
+var int   trade_bars       = 0
+var float trade_high       = na
+var bool  confirm_filled   = false
+var bool  load_filled      = false
+var float confirm_trigger_saved = na
+var float load_trigger_saved    = na
+var float initial_stop_saved    = na
+var float half_atr_saved        = na
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: TREND ENTRY LOGIC
+// ═══════════════════════════════════════════════════════════════════════════════
+
+trend_entry_signal = i_enable_trend and (pullback_signal or vcp_breakout or vwap_signal) and not entry_blocked and total_score >= i_min_score and rr_ratio_sc >= i_min_rr
+
+// Enter only when flat
+if trend_entry_signal and trade_mode == 0
+    strategy.entry("TREND Probe", strategy.long, qty=shares_probe)
+    trade_mode              := 1
+    trade_entry             := close
+    trade_stop              := initial_stop
+    trade_r                 := r_value
+    trade_stage             := 1
+    trade_bars              := 0
+    trade_high              := close
+    confirm_filled          := false
+    load_filled             := false
+    confirm_trigger_saved   := confirm_trigger
+    load_trigger_saved      := load_trigger
+    initial_stop_saved      := initial_stop
+    half_atr_saved          := atr_val / 2
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: TREND SCALING (Confirm + Load)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+if i_enable_scaling and trade_mode == 1 and strategy.position_size > 0
+    // Confirm add at +2.5%
+    if not confirm_filled and close >= confirm_trigger_saved
+        strategy.entry("TREND Confirm", strategy.long, qty=shares_confirm)
+        confirm_filled := true
+        trade_stop     := initial_stop_saved + half_atr_saved  // raise stop by half ATR
+
+    // Load add at +5%
+    if confirm_filled and not load_filled and close >= load_trigger_saved
+        strategy.entry("TREND Load", strategy.long, qty=shares_load)
+        load_filled := true
+        trade_stop  := initial_stop_saved + half_atr_saved * 2  // raise stop again
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: TREND 4-STAGE EXIT SYSTEM
+// ═══════════════════════════════════════════════════════════════════════════════
+
+if trade_mode == 1 and strategy.position_size > 0
+    trade_bars += 1
+    trade_high := math.max(trade_high, close)
+
+    current_r = trade_r > 0 ? (close - trade_entry) / trade_r : 0
+
+    // Stage transitions (ratchet up only)
+    if trade_stage == 1 and current_r >= 1.0
+        trade_stop  := math.max(trade_stop, trade_entry)  // breakeven
+        trade_stage := 2
+
+    if trade_stage == 2 and current_r >= 2.0
+        trade_stage := 3
+
+    if trade_stage == 3 and current_r >= 3.0
+        trade_stage := 4
+
+    // Trailing stop per stage
+    if trade_stage == 3
+        trail_15    = trade_high * 0.85
+        trail_ema   = ema21
+        trail_chand = trade_high - (3 * atr_val)
+        best_trail  = math.max(trail_15, math.max(trail_ema, trail_chand))
+        trade_stop  := math.max(trade_stop, best_trail)
+
+    if trade_stage == 4
+        trail_20    = trade_high * 0.80
+        trade_stop  := math.max(trade_stop, trail_20)
+
+    // --- EXIT CONDITIONS ---
+
+    // Time stop: if after N bars and below +1R
+    if trade_bars >= i_time_stop_bars and current_r < 1.0
+        strategy.close_all("Time Stop (" + str.tostring(i_time_stop_bars) + " bars)")
+        trade_mode := 0
+
+    // Stop hit
+    if low <= trade_stop and trade_mode == 1
+        strategy.exit("Stop S" + str.tostring(trade_stage), from_entry="TREND Probe", stop=trade_stop)
+        if confirm_filled
+            strategy.exit("Stop S" + str.tostring(trade_stage), from_entry="TREND Confirm", stop=trade_stop)
+        if load_filled
+            strategy.exit("Stop S" + str.tostring(trade_stage), from_entry="TREND Load", stop=trade_stop)
+
+    // Climax warning — tighten stop if in stage 3+
+    rapid_adv     = close / ta.lowest(close, 15) > 1.25
+    exhaust_gap   = open > high[1] and volume > vol_sma50 * 2.5
+    up_days       = math.sum(close > open ? 1 : 0, 10)
+    climax_detect = rapid_adv or exhaust_gap or up_days >= 8
+
+    if climax_detect and trade_stage >= 3
+        tight_stop = trade_high * 0.90  // tighten to 10% trail
+        trade_stop := math.max(trade_stop, tight_stop)
+
+// Reset state when position closed
+if strategy.position_size == 0 and trade_mode == 1
+    trade_mode  := 0
+    trade_stage := 0
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: CAPITULATION ENTRY LOGIC
+// ═══════════════════════════════════════════════════════════════════════════════
+
+var int   cap_bars   = 0
+var float cap_stop   = na
+
+if i_enable_cap and cap_entry and trade_mode == 0
+    strategy.entry("CAP Entry", strategy.long, qty=cap_shares)
+    trade_mode := 2
+    trade_entry := close
+    cap_stop    := close * 0.92  // 8% structural stop
+    cap_bars    := 0
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: CAPITULATION EXIT LOGIC
+// ═══════════════════════════════════════════════════════════════════════════════
+
+if trade_mode == 2 and strategy.position_size > 0
+    cap_bars += 1
+
+    // Primary exit: close above 5-day SMA
+    if close > sma5
+        strategy.close_all("CAP: 5-SMA Exit")
+        trade_mode := 0
+
+    // Secondary exit: RSI(2) > 70
+    else if rsi2 > 70
+        strategy.close_all("CAP: RSI(2) > 70")
+        trade_mode := 0
+
+    // Time stop: N trading days if not profitable
+    else if cap_bars >= i_cap_time_stop and strategy.openprofit <= 0
+        strategy.close_all("CAP: Time Stop")
+        trade_mode := 0
+
+    // Structural stop: close below 200 SMA
+    else if close < sma200
+        strategy.close_all("CAP: Below 200 SMA")
+        trade_mode := 0
+
+    // Hard stop
+    else if low <= cap_stop
+        strategy.exit("CAP Stop", from_entry="CAP Entry", stop=cap_stop)
+
+// Reset state when position closed
+if strategy.position_size == 0 and trade_mode == 2
+    trade_mode := 0
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: VISUAL OVERLAYS
+// ═══════════════════════════════════════════════════════════════════════════════
+
+// --- Moving Averages ---
+plot(i_show_ma ? sma50  : na, "SMA 50",  color=color.new(#2196F3, 0), linewidth=1)
+plot(i_show_ma ? sma150 : na, "SMA 150", color=color.new(#FF9800, 0), linewidth=1)
+plot(i_show_ma ? sma200 : na, "SMA 200", color=color.new(#F44336, 0), linewidth=1)
+plot(i_show_ma ? ema21  : na, "EMA 21",  color=color.new(#4CAF50, 0), linewidth=1)
+
+// --- SuperTrend ---
+st_color_d = st_bull_d ? color.new(#00E676, 0) : color.new(#FF5252, 0)
+st_color_w = st_bull_w ? color.new(#00E676, 40) : color.new(#FF5252, 40)
+plot(i_show_supertrend ? st_line_d : na, "ST Daily", color=st_color_d, linewidth=2, style=plot.style_linebr)
+plot(i_show_supertrend ? st_line_w : na, "ST Weekly", color=st_color_w, linewidth=3, style=plot.style_linebr)
+
+// --- Trailing Stop Visualization ---
+trail_plot = trade_mode == 1 and strategy.position_size > 0 ? trade_stop : trade_mode == 2 and strategy.position_size > 0 ? cap_stop : na
+plot(i_show_trail_stop ? trail_plot : na, "Active Stop", color=color.new(#FF5252, 0), linewidth=2, style=plot.style_stepline)
+
+// --- Stage Labels ---
+if i_show_stage_label and trade_mode == 1 and strategy.position_size > 0 and barstate.islast
+    stage_str = trade_stage == 1 ? "S1: Initial" : trade_stage == 2 ? "S2: Breakeven" : trade_stage == 3 ? "S3: Trail 15%" : "S4: Trail 20%"
+    stage_col = trade_stage == 1 ? color.new(#FFD600, 0) : trade_stage == 2 ? color.new(#2196F3, 0) : trade_stage == 3 ? color.new(#00E676, 0) : color.new(#4CAF50, 0)
+    label.new(bar_index, trade_stop, stage_str, style=label.style_label_up, color=stage_col, textcolor=color.new(#FFFFFF, 0), size=size.small)
+
+if i_show_stage_label and trade_mode == 2 and strategy.position_size > 0 and barstate.islast
+    label.new(bar_index, cap_stop, "CAP", style=label.style_label_up, color=color.new(#FFD600, 0), textcolor=color.new(#000000, 0), size=size.small)
+
+// --- Entry Signal Markers ---
+plotshape(pullback_signal and not entry_blocked and total_score >= i_min_score and trade_mode == 0 ? low * 0.998 : na, "Pullback", shape.triangleup, location.absolute, color.new(#00E676, 0), size=size.small)
+plotshape(vcp_breakout and not entry_blocked and total_score >= i_min_score and trade_mode == 0 ? low * 0.998 : na, "VCP", shape.triangleup, location.absolute, color.new(#2979FF, 0), size=size.small)
+plotshape(vwap_signal and not entry_blocked and total_score >= i_min_score and trade_mode == 0 ? low * 0.998 : na, "VWAP", shape.triangleup, location.absolute, color.new(#AB47BC, 0), size=size.small)
+plotshape(cap_entry and trade_mode == 0 ? low * 0.998 : na, "CAP", shape.triangleup, location.absolute, color.new(#FFD600, 0), size=size.small)
+
+// --- Regime Background ---
+regime_bg = regime_green ? color.new(#00C853, 95) : regime_red ? color.new(#FF1744, 95) : color.new(#FFD600, 96)
+bgcolor(regime_bg, title="Regime Background")
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SECTION: INFO TABLE (Strategy Performance Summary)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+c_bg_dark   = color.new(#1E1E2E, 0)
+c_bg_header = color.new(#2A2A3E, 0)
+c_text      = color.new(#E0E0E0, 0)
+c_text_dim  = color.new(#9E9E9E, 0)
+c_green     = color.new(#00E676, 0)
+c_red       = color.new(#FF5252, 0)
+c_yellow    = color.new(#FFD600, 0)
+c_border    = color.new(#3A3A4E, 0)
+
+if barstate.islast and i_show_info_table
+    var table t_info = table.new(position.top_right, 2, 12, bgcolor=c_bg_dark, border_width=1, border_color=c_border, frame_width=2, frame_color=c_border)
+
+    // Header
+    table.cell(t_info, 0, 0, "TRADEGUARD STRATEGY", text_color=c_text, bgcolor=c_bg_header, text_size=size.small, text_halign=text.align_left)
+    table.merge_cells(t_info, 0, 0, 1, 0)
+
+    // Current state
+    mode_str = trade_mode == 0 ? "FLAT" : trade_mode == 1 ? "TREND" : "CAP"
+    mode_col = trade_mode == 0 ? c_text_dim : trade_mode == 1 ? c_green : c_yellow
+    table.cell(t_info, 0, 1, "Position", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 1, mode_str + " | " + str.tostring(strategy.position_size, "#") + " shs", text_color=mode_col, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Stage
+    stage_str = trade_mode == 1 ? "Stage " + str.tostring(trade_stage) : trade_mode == 2 ? "CAP" : "-"
+    table.cell(t_info, 0, 2, "Stage", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 2, stage_str, text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Active stop
+    active_stop = trade_mode == 1 ? trade_stop : trade_mode == 2 ? cap_stop : na
+    table.cell(t_info, 0, 3, "Active Stop", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 3, na(active_stop) ? "-" : "$" + str.tostring(active_stop, "#.##"), text_color=c_red, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Bars in trade
+    table.cell(t_info, 0, 4, "Bars in Trade", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 4, trade_mode > 0 ? str.tostring(trade_mode == 1 ? trade_bars : cap_bars) : "-", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Current R
+    cur_r = trade_mode == 1 and trade_r > 0 ? (close - trade_entry) / trade_r : na
+    r_str = na(cur_r) ? "-" : str.tostring(cur_r, "#.##") + "R"
+    r_col = na(cur_r) ? c_text_dim : cur_r >= 0 ? c_green : c_red
+    table.cell(t_info, 0, 5, "Current R", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 5, r_str, text_color=r_col, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Separator
+    table.cell(t_info, 0, 6, "--- STATS ---", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_left)
+    table.merge_cells(t_info, 0, 6, 1, 6)
+
+    // Closed trades
+    table.cell(t_info, 0, 7, "Closed Trades", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 7, str.tostring(strategy.closedtrades), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Win rate
+    wins   = strategy.wintrades
+    losses = strategy.losstrades
+    wr     = (wins + losses) > 0 ? wins / (wins + losses) * 100 : 0
+    wr_col = wr >= 50 ? c_green : wr >= 40 ? c_yellow : c_red
+    table.cell(t_info, 0, 8, "Win Rate", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 8, str.tostring(wr, "#.#") + "%", text_color=wr_col, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Net profit
+    np     = strategy.netprofit
+    np_col = np >= 0 ? c_green : c_red
+    table.cell(t_info, 0, 9, "Net Profit", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 9, "$" + str.tostring(np, "#,###"), text_color=np_col, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Max drawdown
+    table.cell(t_info, 0, 10, "Max Drawdown", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(t_info, 1, 10, "$" + str.tostring(strategy.max_drawdown, "#,###"), text_color=c_red, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+    // Regime / Score
+    regime_str = regime_green ? "GREEN" : regime_red ? "RED" : "YELLOW"
+    table.cell(t_info, 0, 11, "Regime / Score", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
+    regime_col = regime_green ? c_green : regime_red ? c_red : c_yellow
+    table.cell(t_info, 1, 11, regime_str + " | " + str.tostring(total_score) + "/12", text_color=regime_col, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// END OF SCRIPT 2
+// ═══════════════════════════════════════════════════════════════════════════════
