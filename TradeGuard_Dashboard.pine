@@ -214,13 +214,13 @@ _d(string txt) =>
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // Column width distribution (10 columns summing to 100%)
-var float W = 10.0  // each column = 10% of pane width
+var float W = 10.5  // slightly over 10% per column to guarantee full-width fill
 
 if barstate.islast
     var table d = table.new(position.top_left, 10, 13, bgcolor=c_black, border_width=1, border_color=c_border, frame_width=0, frame_color=c_border)
 
     // ─── ROW 0: REGIME HEADER ───────────────────────────────────────────────
-    table.cell(d, 0, 0, _h("REGIME"), text_color=c_white, bgcolor=c_header, text_size=size.large, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 0, _h("REGIME"), text_color=c_white, bgcolor=c_header, text_size=size.normal, text_halign=text.align_left, width=W)
     table.cell(d, 1, 0, "", bgcolor=c_header, width=W)
     table.cell(d, 2, 0, "", bgcolor=c_header, width=W)
     table.cell(d, 3, 0, "", bgcolor=c_header, width=W)
@@ -229,7 +229,7 @@ if barstate.islast
     table.cell(d, 6, 0, "", bgcolor=c_header, width=W)
     table.cell(d, 7, 0, "", bgcolor=c_header, width=W)
     table.merge_cells(d, 0, 0, 7, 0)
-    table.cell(d, 8, 0, _h(regime_str), text_color=regime_color, bgcolor=c_header, text_size=size.large, text_halign=text.align_right, width=W)
+    table.cell(d, 8, 0, _h(regime_str), text_color=regime_color, bgcolor=c_header, text_size=size.normal, text_halign=text.align_right, width=W)
     table.cell(d, 9, 0, "", bgcolor=c_header, width=W)
     table.merge_cells(d, 8, 0, 9, 0)
 
@@ -256,10 +256,10 @@ if barstate.islast
     table.cell(d, 9, 1, _d(hy_safe ? "Safe" : hy_danger ? "Danger" : "Watch"),                    text_color=hy_c,    bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
 
     // ─── ROW 2: TEMPLATE HEADER ─────────────────────────────────────────────
-    table.cell(d, 0, 2, _h("TREND TEMPLATE"), text_color=c_white, bgcolor=c_header, text_size=size.large, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 2, _h("TREND TEMPLATE"), text_color=c_white, bgcolor=c_header, text_size=size.normal, text_halign=text.align_left, width=W)
     table.merge_cells(d, 0, 2, 7, 2)
     sc_t = template_score == 8 ? c_pass : template_score >= 6 ? c_val : c_fail
-    table.cell(d, 8, 2, _h(str.tostring(template_score) + " / 8"), text_color=sc_t, bgcolor=c_header, text_size=size.large, text_halign=text.align_right, width=W)
+    table.cell(d, 8, 2, _h(str.tostring(template_score) + " / 8"), text_color=sc_t, bgcolor=c_header, text_size=size.normal, text_halign=text.align_right, width=W)
     table.merge_cells(d, 8, 2, 9, 2)
 
     // ─── ROW 3: TEMPLATE CRITERIA ───────────────────────────────────────────
@@ -272,10 +272,10 @@ if barstate.islast
     table.merge_cells(d, 8, 3, 9, 3)
 
     // ─── ROW 4: SCORECARD HEADER ────────────────────────────────────────────
-    table.cell(d, 0, 4, _h("GO / NO-GO"), text_color=c_white, bgcolor=c_header, text_size=size.large, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 4, _h("GO / NO-GO"), text_color=c_white, bgcolor=c_header, text_size=size.normal, text_halign=text.align_left, width=W)
     table.merge_cells(d, 0, 4, 7, 4)
     sc_s = total_score >= i_min_score ? c_pass : total_score >= 6 ? c_val : c_fail
-    table.cell(d, 8, 4, _h(str.tostring(total_score) + " / 12"), text_color=sc_s, bgcolor=c_header, text_size=size.large, text_halign=text.align_right, width=W)
+    table.cell(d, 8, 4, _h(str.tostring(total_score) + " / 12"), text_color=sc_s, bgcolor=c_header, text_size=size.normal, text_halign=text.align_right, width=W)
     table.merge_cells(d, 8, 4, 9, 4)
 
     // ─── ROW 5: SCORECARD DATA ──────────────────────────────────────────────
@@ -292,10 +292,10 @@ if barstate.islast
 
     // ─── ROW 6: TRADE PLAN HEADER ───────────────────────────────────────────
     entry_lbl = i_entry_price == 0 ? syminfo.ticker : syminfo.ticker + "  (custom $" + str.tostring(i_entry_price, "#.##") + ")"
-    table.cell(d, 0, 6, _h("TRADE PLAN  " + entry_lbl), text_color=c_white, bgcolor=c_header, text_size=size.large, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 6, _h("TRADE PLAN  " + entry_lbl), text_color=c_white, bgcolor=c_header, text_size=size.normal, text_halign=text.align_left, width=W)
     table.merge_cells(d, 0, 6, 7, 6)
     mode_str = cap_entry ? "CAP" : "TREND"
-    table.cell(d, 8, 6, _h(mode_str + " | " + entry_type_str), text_color=c_val, bgcolor=c_header, text_size=size.large, text_halign=text.align_right, width=W)
+    table.cell(d, 8, 6, _h(mode_str + " | " + entry_type_str), text_color=c_val, bgcolor=c_header, text_size=size.normal, text_halign=text.align_right, width=W)
     table.merge_cells(d, 8, 6, 9, 6)
 
     // ─── ROW 7: ENTRY / STOP / RISK ────────────────────────────────────────
@@ -337,7 +337,7 @@ if barstate.islast
     table.cell(d, 9, 9, _d(str.tostring(rsi2, "#.#")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
 
     // ─── ROW 10: EXITS HEADER ───────────────────────────────────────────────
-    table.cell(d, 0, 10, _h("EXITS"), text_color=c_white, bgcolor=c_header, text_size=size.large, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 10, _h("EXITS"), text_color=c_white, bgcolor=c_header, text_size=size.normal, text_halign=text.align_left, width=W)
     table.merge_cells(d, 0, 10, 9, 10)
 
     // ─── ROW 11: R-STAGE LEVELS ─────────────────────────────────────────────
