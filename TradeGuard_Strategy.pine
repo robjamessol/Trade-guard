@@ -93,7 +93,7 @@ vwap_val = ta.vwap
 
 spy_close    = request.security("SPY", "D", close)
 spy_sma200   = request.security("SPY", "D", ta.sma(close, 200))
-vix_close    = request.security("TVC:VIX", "D", close)
+vix_close    = request.security("CBOE:VIX", "D", close)
 breadth      = request.security("INDEX:S5TH", "D", close)
 hy_oas       = request.security("FRED:BAMLH0A0HYM2", "D", close)
 
