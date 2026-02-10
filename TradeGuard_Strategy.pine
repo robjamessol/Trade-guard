@@ -230,17 +230,19 @@ max_stop_lim    = close * (1 - i_max_stop_pct / 100)
 initial_stop    = math.max(raw_stop_calc, max_stop_lim)
 r_value         = close - initial_stop
 
-// TREND sizing
-risk_dollars_trend = i_account_nav * (i_risk_trend_pct / 100)
-shares_probe       = r_value > 0 ? math.floor(risk_dollars_trend / r_value) : 0
-shares_target      = math.floor(shares_probe / 0.5)
-shares_confirm     = math.floor(shares_target * 0.30)
-shares_load        = shares_target - shares_probe - shares_confirm
+// TREND sizing — risk-based then NAV-capped
+risk_dollars_trend  = i_account_nav * (i_risk_trend_pct / 100)
+shares_probe_raw    = r_value > 0 ? math.floor(risk_dollars_trend / r_value) : 0
+shares_target_raw   = math.floor(shares_probe_raw / 0.5)
 
-// Cap on max position
-max_shares_nav  = math.floor((i_account_nav * i_max_pos_pct / 100) / close)
-shares_probe    := math.min(shares_probe, max_shares_nav)
-shares_target   := math.min(shares_target, max_shares_nav)
+// Enforce max position % NAV
+max_shares_nav  = close > 0 ? math.floor((i_account_nav * i_max_pos_pct / 100) / close) : 0
+shares_target   = math.min(shares_target_raw, max_shares_nav)
+
+// Recalculate from capped target
+shares_probe    = math.floor(shares_target * 0.5)
+shares_confirm  = math.floor(shares_target * 0.30)
+shares_load     = shares_target - shares_probe - shares_confirm
 
 // CAP sizing
 risk_dollars_cap = i_account_nav * (i_risk_cap_pct / 100)

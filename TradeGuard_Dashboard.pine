@@ -1,0 +1,369 @@
+// This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
+// © TradeGuard v7.0 — Dashboard Panel
+// Script 2 of 3: Separate bottom panel with Regime, Template, Scorecard, Trade Plan tables
+// Add this as a separate indicator below your chart
+
+//@version=6
+indicator("TradeGuard Dashboard", overlay=false, precision=2)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// INPUTS (mirrored from Main for independent operation)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+grp_acct = "Account Settings"
+i_account_nav    = input.float(450000, "Account NAV ($)",          group=grp_acct, minval=1000)
+i_risk_trend_pct = input.float(1.0,    "Risk per TREND trade (%)", group=grp_acct, minval=0.1, maxval=5.0, step=0.1)
+i_risk_cap_pct   = input.float(0.5,    "Risk per CAP trade (%)",   group=grp_acct, minval=0.1, maxval=2.0, step=0.1)
+i_max_pos_pct    = input.float(20.0,   "Max position (% NAV)",     group=grp_acct, minval=1.0, maxval=50.0, step=0.5, tooltip="Hard cap on full position as % of NAV")
+
+grp_entry = "Entry Settings"
+i_entry_price  = input.float(0,      "Custom Entry Price (0 = use close)", group=grp_entry, minval=0, tooltip="Set a specific entry price. Leave 0 to use current close.")
+i_sector_etf   = input.symbol("XLK", "Sector ETF for RS",                  group=grp_entry)
+i_min_template = input.int(7,        "Min Template Score",                  group=grp_entry, minval=1, maxval=8)
+i_min_score    = input.int(9,        "Min Go/No-Go Score",                  group=grp_entry, minval=1, maxval=12)
+
+grp_stop = "Stop Settings"
+i_max_stop_pct   = input.float(8.0, "Max Stop Distance (%)",        group=grp_stop, minval=1.0, maxval=20.0, step=0.5)
+i_atr_low_mult   = input.float(2.0, "ATR Low-Vol Multiplier",       group=grp_stop, minval=1.0, maxval=5.0, step=0.25)
+i_atr_high_mult  = input.float(2.5, "ATR High-Vol Multiplier",      group=grp_stop, minval=1.0, maxval=5.0, step=0.25)
+i_atr_vol_thresh = input.float(4.0, "ATR Volatility Threshold (%)", group=grp_stop, minval=1.0, maxval=10.0, step=0.5)
+
+grp_disp = "Dashboard Display"
+i_show_regime    = input.bool(true, "Show Regime Dashboard",   group=grp_disp)
+i_show_template  = input.bool(true, "Show Template Table",     group=grp_disp)
+i_show_scorecard = input.bool(true, "Show Go/No-Go Scorecard", group=grp_disp)
+i_show_tradeplan = input.bool(true, "Show Trade Plan",         group=grp_disp)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CALCULATIONS (duplicated from Main — Pine scripts can't share data)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+sma50  = ta.sma(close, 50)
+sma150 = ta.sma(close, 150)
+sma200 = ta.sma(close, 200)
+ema21  = ta.ema(close, 21)
+sma5   = ta.sma(close, 5)
+
+[st_line_d, st_dir_d] = ta.supertrend(3.0, 14)
+st_bull_d = st_dir_d < 0
+[st_line_w, st_dir_w] = request.security(syminfo.tickerid, "W", ta.supertrend(3.0, 10))
+st_bull_w = st_dir_w < 0
+
+[di_plus, di_minus, adx_val] = ta.dmi(14, 14)
+rsi2      = ta.rsi(close, 2)
+atr_val   = ta.atr(14)
+atr_pct   = atr_val / close * 100
+vol_sma50 = ta.sma(volume, 50)
+vol_ratio = volume / vol_sma50
+vol_breakout  = vol_ratio >= 1.4
+vol_declining = ta.sma(volume, 10) < vol_sma50 * 0.8
+vwap_val      = ta.vwap
+
+// --- Regime ---
+spy_close  = request.security("SPY", "D", close)
+spy_sma200 = request.security("SPY", "D", ta.sma(close, 200))
+vix_close  = request.security("CBOE:VIX", "D", close)
+vix3m_close = request.security("CBOE:VIX3M", "D", close)
+breadth    = request.security("INDEX:S5TH", "D", close)
+hy_oas     = request.security("FRED:BAMLH0A0HYM2", "D", close)
+
+spy_above_200 = spy_close > spy_sma200
+vix_low       = vix_close < 20
+vix_mid       = vix_close >= 20 and vix_close <= 30
+vix_high      = vix_close > 30
+breadth_strong = breadth > 50
+breadth_weak   = breadth < 30
+hy_safe   = na(hy_oas) ? true : hy_oas < 5
+hy_danger = na(hy_oas) ? false : hy_oas > 6
+vix_contango = na(vix3m_close) ? true : vix_close < vix3m_close
+
+regime_green  = spy_above_200 and vix_low and breadth_strong and hy_safe
+regime_red    = vix_high or hy_danger or breadth_weak
+regime_yellow = not regime_green and not regime_red
+regime_str    = regime_green ? "GREEN" : regime_red ? "RED" : "YELLOW"
+regime_color  = regime_green ? color.new(#00C853,0) : regime_red ? color.new(#FF1744,0) : color.new(#FFD600,0)
+
+// --- Template ---
+low_52w  = ta.lowest(low, 252)
+high_52w = ta.highest(high, 252)
+spy_close_d  = spy_close
+stock_6m_ret = (close - close[126]) / close[126] * 100
+spy_6m_ret   = (spy_close_d - spy_close_d[126]) / spy_close_d[126] * 100
+rs_score     = math.max(0, math.min(99, math.round(50 + (stock_6m_ret - spy_6m_ret) * 1.65)))
+
+t1 = close > sma150 and close > sma200
+t2 = sma150 > sma200
+t3 = sma200 > nz(sma200[100])
+t4 = sma50 > sma150 and sma50 > sma200
+t5 = close > sma50
+t6 = close >= 1.25 * low_52w
+t7 = close >= 0.75 * high_52w
+t8 = rs_score >= 70
+template_score = (t1?1:0)+(t2?1:0)+(t3?1:0)+(t4?1:0)+(t5?1:0)+(t6?1:0)+(t7?1:0)+(t8?1:0)
+
+// --- Sector RS ---
+sector_close    = request.security(i_sector_etf, "D", close)
+sector_2w_ret   = (sector_close - sector_close[10]) / sector_close[10] * 100
+spy_2w_ret      = (spy_close_d - spy_close_d[10]) / spy_close_d[10] * 100
+sector_rs_st    = sector_2w_ret - spy_2w_ret
+sector_3m_ret   = (sector_close - sector_close[63]) / sector_close[63] * 100
+spy_3m_ret      = (spy_close_d - spy_close_d[63]) / spy_close_d[63] * 100
+sector_rs_score = math.max(0, math.min(100, math.round(50 + (sector_3m_ret - spy_3m_ret) * 5)))
+sector_strong   = sector_rs_score > 75
+
+// --- Entry signals (for scoring) ---
+pullback_signal = low <= ema21 and close > ema21 and close > open and close > (high+low)/2 and template_score >= i_min_template
+range_current = ta.highest(high, 10) - ta.lowest(low, 10)
+range_prior   = ta.highest(high[10], 20) - ta.lowest(low[10], 20)
+vcp_setup     = range_current < range_prior * 0.6 and vol_declining and template_score >= i_min_template
+pivot_high    = ta.highest(high, 10)
+vcp_breakout  = ta.crossover(close, pivot_high[1]) and vol_breakout
+vwap_touch    = low <= vwap_val * 1.005 and low >= vwap_val * 0.995
+vwap_signal   = vwap_touch and close > vwap_val and close > open and template_score >= i_min_template
+earnings_gap  = open > close[1] * 1.03 and volume > vol_sma50 * 2.0
+cap_entry     = rsi2 < 5 and close > sma200 and vix_close > 30 and template_score >= 6 and close > open and close > (high+low)/2
+
+extended_21ema = close > ema21 * 1.10
+extended_50sma = close > sma50 * 1.15
+consec_green   = close>open and close[1]>open[1] and close[2]>open[2] and close[3]>open[3] and close[4]>open[4]
+past_pivot     = close > pivot_high[1] * 1.05
+entry_blocked  = extended_21ema or extended_50sma or consec_green or past_pivot
+
+// --- Scoring ---
+entry_price = i_entry_price == 0 ? close : i_entry_price
+stop_mult   = atr_pct <= i_atr_vol_thresh ? i_atr_low_mult : i_atr_high_mult
+raw_stop    = entry_price - (stop_mult * atr_val)
+max_stop    = entry_price * (1 - i_max_stop_pct / 100)
+initial_stop = math.max(raw_stop, max_stop)
+r_value     = entry_price - initial_stop
+stop_pct    = entry_price > 0 ? (entry_price - initial_stop) / entry_price * 100 : 0
+rr_ratio    = r_value > 0 ? (high_52w - entry_price) / r_value : 0
+
+has_pattern   = pullback_signal or vcp_setup or vwap_signal or earnings_gap
+pts_regime    = regime_green ? 2 : regime_yellow ? 1 : 0
+pts_trend     = (st_bull_d?1:0) + (st_bull_w?1:0)
+pts_sector    = sector_strong ? 1 : 0
+pts_setup     = (template_score >= 8 ? 1 : 0) + (has_pattern ? 1 : 0)
+pts_catalyst  = earnings_gap ? 1 : 0
+pts_rr        = rr_ratio >= 5 ? 2 : rr_ratio >= 3 ? 1 : 0
+pts_extension = (not extended_21ema and not extended_50sma) ? 1 : 0
+pts_portfolio = adx_val > 25 ? 1 : 0
+total_score   = pts_regime + pts_trend + pts_sector + pts_setup + pts_catalyst + pts_rr + pts_extension + pts_portfolio
+
+verdict_go        = total_score >= i_min_score
+verdict_watchlist = total_score >= 6 and total_score < i_min_score
+verdict_str       = verdict_go ? "GO" : verdict_watchlist ? "WATCHLIST" : "NO TRADE"
+verdict_color     = verdict_go ? color.new(#00C853,0) : verdict_watchlist ? color.new(#FFD600,0) : color.new(#FF1744,0)
+
+// Conviction
+tier_a_plus = template_score == 8 and st_bull_w and st_bull_d and adx_val > 25 and sector_strong
+tier_a      = template_score == 8 and st_bull_d and (vcp_breakout or pullback_signal) and sector_rs_score > 50
+tier_b      = template_score >= 7 and st_bull_d
+conviction  = tier_a_plus ? "A+" : tier_a ? "A" : tier_b ? "B" : "-"
+
+// --- Position sizing (NAV-capped) ---
+risk_dollars      = i_account_nav * (i_risk_trend_pct / 100)
+shares_probe_raw  = r_value > 0 ? math.floor(risk_dollars / r_value) : 0
+shares_target_raw = math.floor(shares_probe_raw / 0.5)
+max_shares_nav    = entry_price > 0 ? math.floor((i_account_nav * i_max_pos_pct / 100) / entry_price) : 0
+is_nav_capped     = shares_target_raw > max_shares_nav
+shares_target     = math.min(shares_target_raw, max_shares_nav)
+shares_probe      = math.floor(shares_target * 0.5)
+shares_confirm    = math.floor(shares_target * 0.30)
+shares_load       = shares_target - shares_probe - shares_confirm
+
+confirm_price = entry_price * 1.025
+load_price    = entry_price * 1.05
+probe_value   = shares_probe * entry_price
+probe_pct_nav = i_account_nav > 0 ? probe_value / i_account_nav * 100 : 0
+full_value    = shares_target * entry_price
+full_pct_nav  = i_account_nav > 0 ? full_value / i_account_nav * 100 : 0
+probe_risk    = shares_probe * r_value
+probe_risk_pct = i_account_nav > 0 ? probe_risk / i_account_nav * 100 : 0
+full_risk     = shares_target * r_value
+full_risk_pct = i_account_nav > 0 ? full_risk / i_account_nav * 100 : 0
+
+breakeven_trigger = entry_price + r_value
+trail_start       = entry_price + (2 * r_value)
+wide_trail_start  = entry_price + (3 * r_value)
+
+entry_type_str = pullback_signal ? "Pullback 21-EMA" : vcp_breakout ? "VCP Breakout" : vwap_signal ? "VWAP Retest" : earnings_gap ? "Earnings Gap" : cap_entry ? "RSI(2) Cap" : "Manual"
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// SCORE PLOT (visual history in the panel)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+score_col = total_score >= i_min_score ? color.new(#00C853, 0) : total_score >= 6 ? color.new(#FFD600, 0) : color.new(#FF5252, 0)
+plot(total_score, "Go/No-Go Score", color=score_col, style=plot.style_columns, linewidth=2)
+plot(template_score, "Template Score", color=color.new(#448AFF, 50), linewidth=1)
+
+hline(float(i_min_score), "GO Threshold",  color=color.new(#00C853, 60), linestyle=hline.style_dashed)
+hline(6.0,                 "Watch Threshold", color=color.new(#FFD600, 60), linestyle=hline.style_dotted)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// DARK MODE COLOR PALETTE
+// ═══════════════════════════════════════════════════════════════════════════════
+
+c_bg      = color.new(#1A1A2E, 0)
+c_bg_h    = color.new(#252540, 0)
+c_txt     = color.new(#E0E0E0, 0)
+c_dim     = color.new(#888899, 0)
+c_grn     = color.new(#00E676, 0)
+c_yel     = color.new(#FFD600, 0)
+c_red     = color.new(#FF5252, 0)
+c_blu     = color.new(#448AFF, 0)
+c_bdr     = color.new(#333350, 0)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TABLE 1: REGIME DASHBOARD (Top Left)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+if barstate.islast and i_show_regime
+    var table tr = table.new(position.top_left, 3, 8, bgcolor=c_bg, border_width=1, border_color=c_bdr, frame_width=1, frame_color=c_bdr)
+
+    table.cell(tr, 0, 0, "MARKET REGIME", text_color=c_txt, bgcolor=c_bg_h, text_size=size.small)
+    table.merge_cells(tr, 0, 0, 2, 0)
+
+    // Row helper
+    _rc(int r, string lbl, string val, color vc, string stat, color sc) =>
+        table.cell(tr, 0, r, lbl,  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+        table.cell(tr, 1, r, val,  text_color=vc,    bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+        table.cell(tr, 2, r, stat, text_color=sc,    bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    spy_c = spy_above_200 ? c_grn : c_red
+    _rc(1, "SPY vs 200", str.tostring(spy_close,"#.##") + " / " + str.tostring(spy_sma200,"#.##"), c_txt, spy_above_200 ? "Above" : "Below", spy_c)
+
+    vix_c = vix_low ? c_grn : vix_mid ? c_yel : c_red
+    _rc(2, "VIX", str.tostring(vix_close,"#.#"), c_txt, vix_low ? "Low" : vix_mid ? "Elevated" : "High", vix_c)
+
+    vts_c = vix_contango ? c_grn : c_red
+    _rc(3, "Term Structure", str.tostring(vix_close,"#.#") + " / " + str.tostring(vix3m_close,"#.#"), c_txt, vix_contango ? "Contango" : "Backwrd", vts_c)
+
+    b_c = breadth_strong ? c_grn : breadth_weak ? c_red : c_yel
+    _rc(4, "Breadth S5TH", str.tostring(breadth,"#.#") + "%", c_txt, breadth_strong ? "Strong" : breadth_weak ? "Weak" : "Mixed", b_c)
+
+    hy_c = hy_safe ? c_grn : hy_danger ? c_red : c_yel
+    _rc(5, "HY OAS", na(hy_oas) ? "N/A" : str.tostring(hy_oas,"#.##") + "%", c_txt, hy_safe ? "Safe" : hy_danger ? "Danger" : "Watch", hy_c)
+
+    // Sector RS row
+    sec_c = sector_strong ? c_grn : sector_rs_score > 40 ? c_yel : c_red
+    _rc(6, "Sector RS (2w)", str.tostring(sector_rs_st,"#.#") + "%", c_txt, "Score: " + str.tostring(sector_rs_score), sec_c)
+
+    // Regime summary
+    table.cell(tr, 0, 7, "REGIME", text_color=c_txt, bgcolor=c_bg_h, text_size=size.small, text_halign=text.align_left)
+    table.cell(tr, 1, 7, regime_str, text_color=regime_color, bgcolor=c_bg_h, text_size=size.small, text_halign=text.align_right)
+    table.merge_cells(tr, 1, 7, 2, 7)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TABLE 2: MINERVINI TEMPLATE (Top Right)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+if barstate.islast and i_show_template
+    var table tt = table.new(position.top_right, 3, 11, bgcolor=c_bg, border_width=1, border_color=c_bdr, frame_width=1, frame_color=c_bdr)
+
+    table.cell(tt, 0, 0, "TREND TEMPLATE", text_color=c_txt, bgcolor=c_bg_h, text_size=size.small)
+    table.merge_cells(tt, 0, 0, 2, 0)
+
+    labels = array.from("Price > 150 & 200 MA", "150 MA > 200 MA", "200 MA rising 5mo", "50 > 150 & 200 MA", "Price > 50 MA", "25%+ above 52w low", "Within 25% of 52w hi", "RS >= 70")
+    passes = array.from(t1, t2, t3, t4, t5, t6, t7, t8)
+
+    for i = 0 to 7
+        p = array.get(passes, i)
+        pc = p ? c_grn : c_red
+        table.cell(tt, 0, i+1, str.tostring(i+1), text_color=c_dim, bgcolor=c_bg, text_size=size.tiny)
+        table.cell(tt, 1, i+1, array.get(labels, i), text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+        table.cell(tt, 2, i+1, p ? "PASS" : "FAIL", text_color=pc, bgcolor=c_bg, text_size=size.tiny)
+
+    sc = template_score == 8 ? c_grn : template_score >= 6 ? c_yel : c_red
+    table.cell(tt, 0, 9, "",      bgcolor=c_bg_h, text_size=size.tiny)
+    table.cell(tt, 1, 9, "SCORE", text_color=c_txt, bgcolor=c_bg_h, text_size=size.small, text_halign=text.align_left)
+    table.cell(tt, 2, 9, str.tostring(template_score) + " / 8", text_color=sc, bgcolor=c_bg_h, text_size=size.small)
+
+    table.cell(tt, 0, 10, "", bgcolor=c_bg_h, text_size=size.tiny)
+    table.cell(tt, 1, 10, "RS Score", text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tt, 2, 10, str.tostring(rs_score), text_color=rs_score >= 70 ? c_grn : c_yel, bgcolor=c_bg_h, text_size=size.tiny)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TABLE 3: GO/NO-GO SCORECARD (Bottom Right)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+if barstate.islast and i_show_scorecard
+    var table ts = table.new(position.bottom_right, 3, 12, bgcolor=c_bg, border_width=1, border_color=c_bdr, frame_width=1, frame_color=c_bdr)
+
+    table.cell(ts, 0, 0, "GO / NO-GO", text_color=c_txt, bgcolor=c_bg_h, text_size=size.small)
+    table.merge_cells(ts, 0, 0, 2, 0)
+
+    table.cell(ts, 0, 1, "Check", text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(ts, 1, 1, "Pts",   text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny)
+    table.cell(ts, 2, 1, "Max",   text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny)
+
+    names = array.from("Market Regime", "Trend Alignment", "Sector RS", "Setup Quality", "Catalyst", "Risk:Reward", "Extension", "Portfolio Fit")
+    pts_arr = array.from(pts_regime, pts_trend, pts_sector, pts_setup, pts_catalyst, pts_rr, pts_extension, pts_portfolio)
+    max_arr = array.from(2, 2, 1, 2, 1, 2, 1, 1)
+
+    for i = 0 to 7
+        p = array.get(pts_arr, i)
+        m = array.get(max_arr, i)
+        pc = p == m ? c_grn : p > 0 ? c_yel : c_red
+        table.cell(ts, 0, i+2, array.get(names, i), text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+        table.cell(ts, 1, i+2, str.tostring(p),     text_color=pc,    bgcolor=c_bg, text_size=size.tiny)
+        table.cell(ts, 2, i+2, str.tostring(m),     text_color=c_dim, bgcolor=c_bg, text_size=size.tiny)
+
+    table.cell(ts, 0, 10, "TOTAL",  text_color=c_txt, bgcolor=c_bg_h, text_size=size.small, text_halign=text.align_left)
+    table.cell(ts, 1, 10, str.tostring(total_score), text_color=verdict_color, bgcolor=c_bg_h, text_size=size.small)
+    table.cell(ts, 2, 10, "12",     text_color=c_dim, bgcolor=c_bg_h, text_size=size.small)
+
+    table.cell(ts, 0, 11, "VERDICT", text_color=#FFFFFF, bgcolor=verdict_color, text_size=size.small, text_halign=text.align_left)
+    table.cell(ts, 1, 11, verdict_str, text_color=#FFFFFF, bgcolor=verdict_color, text_size=size.small)
+    table.cell(ts, 2, 11, "Tier " + conviction, text_color=#FFFFFF, bgcolor=verdict_color, text_size=size.small)
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// TABLE 4: TRADE PLAN (Bottom Left)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+if barstate.islast and i_show_tradeplan
+    var table tp = table.new(position.bottom_left, 2, 18, bgcolor=c_bg, border_width=1, border_color=c_bdr, frame_width=1, frame_color=c_bdr)
+
+    // Header
+    entry_label = i_entry_price == 0 ? syminfo.ticker : syminfo.ticker + " (custom $" + str.tostring(i_entry_price,"#.##") + ")"
+    table.cell(tp, 0, 0, "TRADE PLAN: " + entry_label, text_color=#FFFFFF, bgcolor=verdict_color, text_size=size.small, text_halign=text.align_left)
+    table.cell(tp, 1, 0, verdict_str + " | " + str.tostring(total_score) + "/12 | " + conviction, text_color=#FFFFFF, bgcolor=verdict_color, text_size=size.small, text_halign=text.align_right)
+
+    // Helper
+    _tp(int r, string lbl, string val, color vc) =>
+        table.cell(tp, 0, r, lbl, text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+        table.cell(tp, 1, r, val, text_color=vc,    bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    mode_str = cap_entry ? "CAPITULATION" : "TREND"
+    _tp(1, "Mode / Type", mode_str + " | " + entry_type_str, c_txt)
+    _tp(2, "Entry Price",  "$" + str.tostring(entry_price, "#.##"), c_blu)
+    _tp(3, "Initial Stop", "$" + str.tostring(initial_stop, "#.##") + " (" + str.tostring(stop_pct, "#.#") + "% | " + str.tostring(stop_mult, "#.#") + "x ATR)", c_red)
+    _tp(4, "R per Share",  "$" + str.tostring(r_value, "#.##"), c_txt)
+
+    // Sizing section
+    table.cell(tp, 0, 5, "POSITION SIZING", text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_left)
+    cap_note = is_nav_capped ? " [NAV capped]" : ""
+    table.cell(tp, 1, 5, cap_note, text_color=c_yel, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_right)
+
+    _tp(6,  "Probe (50%)",   str.tostring(shares_probe) + " shs | $" + str.tostring(probe_value, "#,###") + " (" + str.tostring(probe_pct_nav, "#.#") + "% NAV)", c_txt)
+    _tp(7,  "Confirm (30%)", str.tostring(shares_confirm) + " shs @ $" + str.tostring(confirm_price, "#.##"), c_txt)
+    _tp(8,  "Load (20%)",    str.tostring(shares_load) + " shs @ $" + str.tostring(load_price, "#.##"), c_txt)
+    _tp(9,  "Full Position", str.tostring(shares_target) + " shs | $" + str.tostring(full_value, "#,###") + " (" + str.tostring(full_pct_nav, "#.#") + "% NAV)", c_txt)
+
+    // Risk section
+    table.cell(tp, 0, 10, "RISK", text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 10, "",     text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny)
+
+    _tp(11, "Risk (Probe)", "$" + str.tostring(probe_risk, "#,###") + " (" + str.tostring(probe_risk_pct, "#.#") + "% NAV)", c_red)
+    _tp(12, "Risk (Full)",  "$" + str.tostring(full_risk, "#,###") + " (" + str.tostring(full_risk_pct, "#.#") + "% NAV)", c_red)
+
+    rr_c = rr_ratio >= 5 ? c_grn : rr_ratio >= 3 ? c_yel : c_red
+    _tp(13, "R:R", str.tostring(rr_ratio, "#.#") + " : 1", rr_c)
+
+    // R-stage exits
+    table.cell(tp, 0, 14, "R-STAGE EXITS", text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 14, "",              text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny)
+
+    _tp(15, "+1R Breakeven", "$" + str.tostring(breakeven_trigger, "#.##") + " -> stop to $" + str.tostring(entry_price, "#.##"), c_grn)
+    _tp(16, "+2R Trail",     "$" + str.tostring(trail_start, "#.##") + " -> 15% / 21-EMA", c_grn)
+    _tp(17, "+3R Wide",      "$" + str.tostring(wide_trail_start, "#.##") + " -> 20% trail", c_grn)

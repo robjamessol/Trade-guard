@@ -1,715 +1,318 @@
 // This Pine Script™ code is subject to the terms of the Mozilla Public License 2.0 at https://mozilla.org/MPL/2.0/
-// © TradeGuard v7.0 — Main Indicator/Overlay
-// Script 1 of 2: Regime Dashboard, Minervini Template, Go/No-Go Scorecard,
-//                Trade Plan Calculator, Visual Overlays, Entry Signals, Alerts
+// © TradeGuard v7.0 — Chart Overlay
+// Script 1 of 3: Clean chart overlay with MAs, SuperTrend, entry/stop levels, signal markers, alerts
+// ALL tables/dashboards are in the separate TradeGuard_Dashboard.pine script
 
 //@version=6
-indicator("TradeGuard v7.0", overlay=true, max_labels_count=500, max_lines_count=500, max_boxes_count=200)
+indicator("TradeGuard v7.0", overlay=true, max_labels_count=100, max_lines_count=100)
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// GROUP: Account Settings
+// INPUTS
 // ═══════════════════════════════════════════════════════════════════════════════
+
+// --- Account ---
 grp_acct = "Account Settings"
-i_account_nav      = input.float(450000, "Account NAV ($)",             group=grp_acct, minval=1000)
-i_risk_trend_pct   = input.float(1.0,    "Risk per TREND trade (%)",    group=grp_acct, minval=0.1, maxval=5.0, step=0.1)
-i_risk_cap_pct     = input.float(0.5,    "Risk per CAP trade (%)",      group=grp_acct, minval=0.1, maxval=2.0, step=0.1)
-i_max_pos_pct      = input.float(20.0,   "Max position (% NAV)",        group=grp_acct, minval=1.0, maxval=50.0, step=0.5)
+i_account_nav    = input.float(450000, "Account NAV ($)",          group=grp_acct, minval=1000, tooltip="Total account net asset value")
+i_risk_trend_pct = input.float(1.0,    "Risk per TREND trade (%)", group=grp_acct, minval=0.1, maxval=5.0, step=0.1)
+i_risk_cap_pct   = input.float(0.5,    "Risk per CAP trade (%)",   group=grp_acct, minval=0.1, maxval=2.0, step=0.1)
+i_max_pos_pct    = input.float(20.0,   "Max position (% NAV)",     group=grp_acct, minval=1.0, maxval=50.0, step=0.5, tooltip="Hard cap on full position size as % of NAV")
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// GROUP: Entry Settings
-// ═══════════════════════════════════════════════════════════════════════════════
+// --- Entry ---
 grp_entry = "Entry Settings"
-i_entry_price      = input.float(0,      "Entry Price Override (0=close)", group=grp_entry, minval=0)
-i_sector_etf       = input.symbol("XLK", "Sector ETF for RS",             group=grp_entry)
-i_min_template     = input.int(7,        "Min Template Score",             group=grp_entry, minval=1, maxval=8)
-i_min_score        = input.int(9,        "Min Go/No-Go Score",             group=grp_entry, minval=1, maxval=12)
-i_min_rr           = input.float(3.0,    "Min R:R Ratio",                  group=grp_entry, minval=1.0, maxval=10.0, step=0.5)
+i_entry_price  = input.float(0,      "Custom Entry Price (0 = use close)", group=grp_entry, minval=0, tooltip="Set a specific entry price for trade plan calculations. Leave at 0 to use the current close price.")
+i_sector_etf   = input.symbol("XLK", "Sector ETF for RS",                  group=grp_entry)
+i_min_template = input.int(7,        "Min Template Score",                  group=grp_entry, minval=1, maxval=8)
+i_min_score    = input.int(9,        "Min Go/No-Go Score",                  group=grp_entry, minval=1, maxval=12)
+i_min_rr       = input.float(3.0,    "Min R:R Ratio",                      group=grp_entry, minval=1.0, maxval=10.0, step=0.5)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// GROUP: Stop Settings
-// ═══════════════════════════════════════════════════════════════════════════════
+// --- Stop ---
 grp_stop = "Stop Settings"
-i_max_stop_pct     = input.float(8.0,    "Max Stop Distance (%)",       group=grp_stop, minval=1.0, maxval=20.0, step=0.5)
-i_atr_low_mult     = input.float(2.0,    "ATR Low-Vol Multiplier",      group=grp_stop, minval=1.0, maxval=5.0, step=0.25)
-i_atr_high_mult    = input.float(2.5,    "ATR High-Vol Multiplier",     group=grp_stop, minval=1.0, maxval=5.0, step=0.25)
-i_atr_vol_thresh   = input.float(4.0,    "ATR Volatility Threshold (%)",group=grp_stop, minval=1.0, maxval=10.0, step=0.5)
+i_max_stop_pct   = input.float(8.0, "Max Stop Distance (%)",        group=grp_stop, minval=1.0, maxval=20.0, step=0.5)
+i_atr_low_mult   = input.float(2.0, "ATR Low-Vol Multiplier",       group=grp_stop, minval=1.0, maxval=5.0, step=0.25)
+i_atr_high_mult  = input.float(2.5, "ATR High-Vol Multiplier",      group=grp_stop, minval=1.0, maxval=5.0, step=0.25)
+i_atr_vol_thresh = input.float(4.0, "ATR Volatility Threshold (%)", group=grp_stop, minval=1.0, maxval=10.0, step=0.5)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// GROUP: Display Settings
-// ═══════════════════════════════════════════════════════════════════════════════
-grp_disp = "Display Settings"
-i_show_regime      = input.bool(true,  "Show Regime Dashboard",    group=grp_disp)
-i_show_template    = input.bool(true,  "Show Template Table",      group=grp_disp)
-i_show_tradeplan   = input.bool(true,  "Show Trade Plan",          group=grp_disp)
-i_show_scorecard   = input.bool(true,  "Show Go/No-Go Scorecard",  group=grp_disp)
-i_show_ma          = input.bool(true,  "Show MA Lines",            group=grp_disp)
-i_show_supertrend  = input.bool(true,  "Show SuperTrend Lines",    group=grp_disp)
-i_show_ext_bands   = input.bool(true,  "Show Extension Bands",     group=grp_disp)
-i_show_entry_stop  = input.bool(true,  "Show Entry/Stop Lines",    group=grp_disp)
-i_show_signals     = input.bool(true,  "Show Entry Signal Markers", group=grp_disp)
-i_show_bg_regime   = input.bool(true,  "Tint Background by Regime", group=grp_disp)
-i_show_bg_verdict  = input.bool(false, "Tint Background by Verdict",group=grp_disp)
+// --- Signal Toggles ---
+grp_sig = "Signal Markers"
+i_sig_pullback = input.bool(true,  "Show Pullback Signals",       group=grp_sig)
+i_sig_vcp      = input.bool(true,  "Show VCP Breakout Signals",   group=grp_sig)
+i_sig_vwap     = input.bool(false, "Show VWAP Retest Signals",    group=grp_sig, tooltip="Off by default — can be noisy")
+i_sig_gap      = input.bool(true,  "Show Earnings Gap Signals",   group=grp_sig)
+i_sig_cap      = input.bool(true,  "Show Capitulation Signals",   group=grp_sig)
+i_sig_blocked  = input.bool(false, "Show Entry Blocked Markers",  group=grp_sig, tooltip="Off by default — shows X when anti-chase filter blocks entry")
+i_sig_climax   = input.bool(true,  "Show Climax Warnings",        group=grp_sig)
+i_sig_min_score = input.int(6,     "Min Score to Show Signals",   group=grp_sig, minval=0, maxval=12, tooltip="Only show signals when Go/No-Go score is at or above this level. Set to 0 to show all.")
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// GROUP: VWAP Settings
-// ═══════════════════════════════════════════════════════════════════════════════
+// --- Display ---
+grp_disp = "Chart Display"
+i_show_ma         = input.bool(true,  "Show Moving Averages",      group=grp_disp)
+i_show_supertrend = input.bool(true,  "Show SuperTrend Lines",     group=grp_disp)
+i_show_ext_bands  = input.bool(false, "Show Extension Bands",      group=grp_disp)
+i_show_levels     = input.bool(true,  "Show Entry/Stop/R Lines",   group=grp_disp, tooltip="Horizontal lines for entry, stop, and R-levels on the last bar")
+i_show_bg_regime  = input.bool(false, "Tint Background by Regime", group=grp_disp, tooltip="Very subtle background color based on market regime")
+
+// --- VWAP ---
 grp_vwap = "Anchored VWAP"
-i_vwap_mode        = input.string("Manual", "VWAP Anchor Mode", options=["Manual", "Auto-Detect", "Both"], group=grp_vwap)
-i_vwap_date        = input.time(timestamp("2025-01-01"), "Manual Anchor Date", group=grp_vwap)
+i_vwap_mode = input.string("Manual", "VWAP Anchor Mode", options=["Off", "Manual", "Auto-Detect", "Both"], group=grp_vwap)
+i_vwap_date = input.time(timestamp("2025-01-01"), "Manual Anchor Date", group=grp_vwap)
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 2: CORE INDICATOR CALCULATIONS
+// CORE CALCULATIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
 // --- Moving Averages ---
-sma50   = ta.sma(close, 50)
-sma150  = ta.sma(close, 150)
-sma200  = ta.sma(close, 200)
-ema21   = ta.ema(close, 21)
-ema200  = ta.ema(close, 200)
-sma5    = ta.sma(close, 5)
+sma50  = ta.sma(close, 50)
+sma150 = ta.sma(close, 150)
+sma200 = ta.sma(close, 200)
+ema21  = ta.ema(close, 21)
+sma5   = ta.sma(close, 5)
 
-// --- SuperTrend (Daily) ---
-st_atr_len_d  = 14
-st_factor_d   = 3.0
-[st_line_d, st_dir_d] = ta.supertrend(st_factor_d, st_atr_len_d)
-st_bull_d     = st_dir_d < 0  // Pine: dir < 0 means bullish (price above supertrend)
+// --- SuperTrend ---
+[st_line_d, st_dir_d] = ta.supertrend(3.0, 14)
+st_bull_d = st_dir_d < 0
 
-// --- SuperTrend (Weekly via request.security) ---
 [st_line_w, st_dir_w] = request.security(syminfo.tickerid, "W", ta.supertrend(3.0, 10))
-st_bull_w     = st_dir_w < 0
+st_bull_w = st_dir_w < 0
 
-// --- ADX ---
-adx_len       = 14
-[di_plus, di_minus, adx_val] = ta.dmi(adx_len, adx_len)
-
-// --- RSI(2) ---
-rsi2          = ta.rsi(close, 2)
-
-// --- ATR(14) ---
-atr_val       = ta.atr(14)
-atr_pct       = atr_val / close * 100
-
-// --- Volume Analysis ---
-vol_sma50     = ta.sma(volume, 50)
-vol_ratio     = volume / vol_sma50
+// --- ADX / RSI / ATR / Volume ---
+[di_plus, di_minus, adx_val] = ta.dmi(14, 14)
+rsi2      = ta.rsi(close, 2)
+atr_val   = ta.atr(14)
+atr_pct   = atr_val / close * 100
+vol_sma50 = ta.sma(volume, 50)
+vol_ratio = volume / vol_sma50
 vol_breakout  = vol_ratio >= 1.4
 vol_declining = ta.sma(volume, 10) < vol_sma50 * 0.8
-
-// --- VWAP ---
 vwap_val      = ta.vwap
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 3: REGIME DASHBOARD (via request.security)
+// REGIME (for signal gating + optional background)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-spy_close    = request.security("SPY", "D", close)
-spy_sma200   = request.security("SPY", "D", ta.sma(close, 200))
-vix_close    = request.security("CBOE:VIX", "D", close)
-vix3m_close  = request.security("CBOE:VIX3M", "D", close)
-breadth      = request.security("INDEX:S5TH", "D", close)
-hy_oas       = request.security("FRED:BAMLH0A0HYM2", "D", close)
+spy_close  = request.security("SPY", "D", close)
+spy_sma200 = request.security("SPY", "D", ta.sma(close, 200))
+vix_close  = request.security("CBOE:VIX", "D", close)
+vix3m_close = request.security("CBOE:VIX3M", "D", close)
+breadth    = request.security("INDEX:S5TH", "D", close)
+hy_oas     = request.security("FRED:BAMLH0A0HYM2", "D", close)
 
-// Regime logic
-spy_above_200   = spy_close > spy_sma200
-vix_low         = vix_close < 20
-vix_mid         = vix_close >= 20 and vix_close <= 30
-vix_high_regime = vix_close > 30
-breadth_strong  = breadth > 50
-breadth_weak    = breadth < 30
-hy_safe         = na(hy_oas) ? true : hy_oas < 5
-hy_danger       = na(hy_oas) ? false : hy_oas > 6
-vix_contango    = na(vix3m_close) ? true : vix_close < vix3m_close
-vix_backwardation = na(vix3m_close) ? false : vix_close > vix3m_close
-
-regime_green  = spy_above_200 and vix_low and breadth_strong and hy_safe
-regime_red    = vix_high_regime or hy_danger or breadth_weak
+spy_above_200 = spy_close > spy_sma200
+regime_green  = spy_above_200 and vix_close < 20 and breadth > 50 and (na(hy_oas) or hy_oas < 5)
+regime_red    = vix_close > 30 or (not na(hy_oas) and hy_oas > 6) or breadth < 30
 regime_yellow = not regime_green and not regime_red
-
-regime_str    = regime_green ? "GREEN" : regime_red ? "RED" : "YELLOW"
-regime_color  = regime_green ? color.new(#00C853, 0) : regime_red ? color.new(#FF1744, 0) : color.new(#FFD600, 0)
 
 // Regime change detection
 var string prev_regime = "YELLOW"
+regime_str = regime_green ? "GREEN" : regime_red ? "RED" : "YELLOW"
 regime_changed_to_red   = regime_str == "RED" and prev_regime != "RED"
 regime_changed_to_green = regime_str == "GREEN" and prev_regime != "GREEN"
 prev_regime := regime_str
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 4: MINERVINI TREND TEMPLATE SCORING
+// TREND TEMPLATE + SECTOR RS + SCORING (internal — needed for signal gating)
 // ═══════════════════════════════════════════════════════════════════════════════
 
 low_52w  = ta.lowest(low, 252)
 high_52w = ta.highest(high, 252)
 
-// RS: Stock 6-month return vs SPY 6-month return (simplified)
-spy_close_d   = request.security("SPY", "D", close)
-stock_6m_ret  = (close - close[126]) / close[126] * 100
-spy_6m_ret    = (spy_close_d - spy_close_d[126]) / spy_close_d[126] * 100
-stock_rs_raw  = stock_6m_ret - spy_6m_ret
-// Map to 0-99 scale: >30% outperformance = 99, <-30% = 0, linear between
-rs_score      = math.max(0, math.min(99, math.round(50 + stock_rs_raw * 1.65)))
+spy_close_d  = spy_close  // reuse
+stock_6m_ret = (close - close[126]) / close[126] * 100
+spy_6m_ret   = (spy_close_d - spy_close_d[126]) / spy_close_d[126] * 100
+rs_score     = math.max(0, math.min(99, math.round(50 + (stock_6m_ret - spy_6m_ret) * 1.65)))
 
-// The 8 criteria
 t1 = close > sma150 and close > sma200
 t2 = sma150 > sma200
-t3 = sma200 > nz(sma200[100])          // 200 SMA rising over ~5 months (prefer longer)
+t3 = sma200 > nz(sma200[100])
 t4 = sma50 > sma150 and sma50 > sma200
 t5 = close > sma50
 t6 = close >= 1.25 * low_52w
 t7 = close >= 0.75 * high_52w
 t8 = rs_score >= 70
+template_score = (t1?1:0)+(t2?1:0)+(t3?1:0)+(t4?1:0)+(t5?1:0)+(t6?1:0)+(t7?1:0)+(t8?1:0)
 
-template_score = (t1 ? 1 : 0) + (t2 ? 1 : 0) + (t3 ? 1 : 0) + (t4 ? 1 : 0) + (t5 ? 1 : 0) + (t6 ? 1 : 0) + (t7 ? 1 : 0) + (t8 ? 1 : 0)
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 5: ENTRY SIGNAL DETECTION
-// ═══════════════════════════════════════════════════════════════════════════════
-
-// --- 5.1 Pullback to 21-EMA ---
-pullback_touch   = low <= ema21 and close > ema21
-bullish_candle   = close > open and close > (high + low) / 2
-pullback_signal  = pullback_touch and bullish_candle and template_score >= i_min_template
-
-// --- 5.2 VCP Detection ---
-range_current = ta.highest(high, 10) - ta.lowest(low, 10)
-range_prior   = ta.highest(high[10], 20) - ta.lowest(low[10], 20)
-contracting   = range_current < range_prior * 0.6
-
-vcp_setup     = contracting and vol_declining and template_score >= i_min_template
-
-pivot_high    = ta.highest(high, 10)
-vcp_breakout  = ta.crossover(close, pivot_high[1]) and vol_breakout
-
-// --- 5.3 VWAP Retest ---
-vwap_touch    = low <= vwap_val * 1.005 and low >= vwap_val * 0.995
-vwap_reclaim  = close > vwap_val and close > open
-vwap_signal   = vwap_touch and vwap_reclaim and template_score >= i_min_template
-
-// --- 5.4 Post-Earnings Gap ---
-gap_up        = open > close[1] * 1.03
-huge_volume   = volume > vol_sma50 * 2.0
-earnings_gap  = gap_up and huge_volume
-
-// --- 5.5 RSI(2) Capitulation Entry ---
-spy_above_200_d  = request.security("SPY", "D", close > ta.sma(close, 200))
-price_above_200  = close > sma200
-vix_high_cap     = vix_close > 30
-reversal_candle  = close > open and close > (high + low) / 2
-
-cap_entry = rsi2 < 5 and price_above_200 and vix_high_cap and template_score >= 6 and reversal_candle
-
-// --- 5.6 Anti-Chase Filters ---
-extended_21ema  = close > ema21 * 1.10
-extended_50sma  = close > sma50 * 1.15
-consec_green    = close > open and close[1] > open[1] and close[2] > open[2] and close[3] > open[3] and close[4] > open[4]
-past_pivot      = close > pivot_high[1] * 1.05
-
-entry_blocked   = extended_21ema or extended_50sma or consec_green or past_pivot
-
-// Combined entry signals (any TREND entry)
-any_trend_entry = (pullback_signal or vcp_breakout or vwap_signal) and not entry_blocked
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 6: SECTOR RELATIVE STRENGTH
-// ═══════════════════════════════════════════════════════════════════════════════
-
-sector_close   = request.security(i_sector_etf, "D", close)
-
-// Short-term RS (2-week / 10-day) for entry timing
-sector_2w_ret  = (sector_close - sector_close[10]) / sector_close[10] * 100
-spy_2w_ret     = (spy_close_d - spy_close_d[10]) / spy_close_d[10] * 100
-sector_rs_st   = sector_2w_ret - spy_2w_ret  // positive = outperforming
-
-// 3-month RS for broader context
-sector_3m_ret  = (sector_close - sector_close[63]) / sector_close[63] * 100
-spy_3m_ret     = (spy_close_d - spy_close_d[63]) / spy_close_d[63] * 100
-sector_rs      = sector_3m_ret - spy_3m_ret
-
-// Map sector RS to a 0-100 score (top quartile = above 75)
-sector_rs_score = math.max(0, math.min(100, math.round(50 + sector_rs * 5)))
+// Sector RS
+sector_close    = request.security(i_sector_etf, "D", close)
+sector_3m_ret   = (sector_close - sector_close[63]) / sector_close[63] * 100
+spy_3m_ret      = (spy_close_d - spy_close_d[63]) / spy_close_d[63] * 100
+sector_rs_score = math.max(0, math.min(100, math.round(50 + (sector_3m_ret - spy_3m_ret) * 5)))
 sector_strong   = sector_rs_score > 75
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 7: GO/NO-GO SCORECARD
+// ENTRY SIGNAL DETECTION
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// 1. Market Regime (0-2)
-pts_regime = regime_green ? 2 : regime_yellow ? 1 : 0
+pullback_signal = low <= ema21 and close > ema21 and close > open and close > (high+low)/2 and template_score >= i_min_template
 
-// 2. Trend Alignment (0-2)
-pts_trend = (st_bull_d ? 1 : 0) + (st_bull_w ? 1 : 0)
+range_current = ta.highest(high, 10) - ta.lowest(low, 10)
+range_prior   = ta.highest(high[10], 20) - ta.lowest(low[10], 20)
+vcp_setup     = range_current < range_prior * 0.6 and vol_declining and template_score >= i_min_template
+pivot_high    = ta.highest(high, 10)
+vcp_breakout  = ta.crossover(close, pivot_high[1]) and vol_breakout
 
-// 3. Sector/Group RS (0-1)
-pts_sector = sector_strong ? 1 : 0
+vwap_touch  = low <= vwap_val * 1.005 and low >= vwap_val * 0.995
+vwap_signal = vwap_touch and close > vwap_val and close > open and template_score >= i_min_template
 
-// 4. Setup Quality (0-2)
+earnings_gap = open > close[1] * 1.03 and volume > vol_sma50 * 2.0
+
+cap_entry = rsi2 < 5 and close > sma200 and vix_close > 30 and template_score >= 6 and close > open and close > (high+low)/2
+
+// Anti-chase
+extended_21ema = close > ema21 * 1.10
+extended_50sma = close > sma50 * 1.15
+consec_green   = close>open and close[1]>open[1] and close[2]>open[2] and close[3]>open[3] and close[4]>open[4]
+past_pivot     = close > pivot_high[1] * 1.05
+entry_blocked  = extended_21ema or extended_50sma or consec_green or past_pivot
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// GO/NO-GO SCORECARD (internal)
+// ═══════════════════════════════════════════════════════════════════════════════
+
+entry_price = i_entry_price == 0 ? close : i_entry_price
+stop_mult   = atr_pct <= i_atr_vol_thresh ? i_atr_low_mult : i_atr_high_mult
+raw_stop    = entry_price - (stop_mult * atr_val)
+max_stop    = entry_price * (1 - i_max_stop_pct / 100)
+initial_stop = math.max(raw_stop, max_stop)
+r_value     = entry_price - initial_stop
+rr_ratio    = r_value > 0 ? (high_52w - entry_price) / r_value : 0
+
 has_pattern = pullback_signal or vcp_setup or vwap_signal or earnings_gap
-pts_setup   = (template_score >= 8 ? 1 : 0) + (has_pattern ? 1 : 0)
+pts_regime    = regime_green ? 2 : regime_yellow ? 1 : 0
+pts_trend     = (st_bull_d?1:0) + (st_bull_w?1:0)
+pts_sector    = sector_strong ? 1 : 0
+pts_setup     = (template_score >= 8 ? 1 : 0) + (has_pattern ? 1 : 0)
+pts_catalyst  = earnings_gap ? 1 : 0
+pts_rr        = rr_ratio >= 5 ? 2 : rr_ratio >= 3 ? 1 : 0
+pts_extension = (not extended_21ema and not extended_50sma) ? 1 : 0
+pts_portfolio = adx_val > 25 ? 1 : 0
+total_score   = pts_regime + pts_trend + pts_sector + pts_setup + pts_catalyst + pts_rr + pts_extension + pts_portfolio
 
-// 5. Catalyst (0-1) — auto-detect gap-up on volume as proxy
-pts_catalyst = earnings_gap ? 1 : 0
+verdict_go = total_score >= i_min_score
 
-// 6. Risk-to-Reward (0-2) — calculated from entry/stop/target
-entry_calc     = i_entry_price == 0 ? close : i_entry_price
-stop_mult_calc = atr_pct <= i_atr_vol_thresh ? i_atr_low_mult : i_atr_high_mult
-raw_stop_calc  = entry_calc - (stop_mult_calc * atr_val)
-max_stop_calc  = entry_calc * (1 - i_max_stop_pct / 100)
-stop_calc      = math.max(raw_stop_calc, max_stop_calc)
-r_per_share    = entry_calc - stop_calc
-// Simple target estimate: use 52-week high as initial target
-target_est     = high_52w
-rr_ratio       = r_per_share > 0 ? (target_est - entry_calc) / r_per_share : 0
-pts_rr         = rr_ratio >= 5 ? 2 : rr_ratio >= 3 ? 1 : 0
-
-// 7. Extension Check (0-1)
-not_extended   = not extended_21ema and not extended_50sma
-pts_extension  = not_extended ? 1 : 0
-
-// 8. Portfolio Fit (0-1)
-pts_portfolio  = adx_val > 25 ? 1 : 0
-
-// TOTAL SCORE
-total_score    = pts_regime + pts_trend + pts_sector + pts_setup + pts_catalyst + pts_rr + pts_extension + pts_portfolio
-
-// Verdict
-verdict_go        = total_score >= i_min_score
-verdict_watchlist = total_score >= 6 and total_score < i_min_score
-verdict_no_trade  = total_score < 6
-verdict_str       = verdict_go ? "GO" : verdict_watchlist ? "WATCHLIST" : "NO TRADE"
-verdict_color     = verdict_go ? color.new(#00C853, 0) : verdict_watchlist ? color.new(#FFD600, 0) : color.new(#FF1744, 0)
+// Climax
+climax_warning = close / ta.lowest(close, 15) > 1.25 or (open > high[1] and volume > vol_sma50 * 2.5) or math.sum(close > open ? 1 : 0, 10) >= 8
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 8: CONVICTION TIER
+// POSITION SIZING (with NAV cap fix)
 // ═══════════════════════════════════════════════════════════════════════════════
 
-tier_a_plus = template_score == 8 and st_bull_w and st_bull_d and adx_val > 25 and sector_strong
-tier_a      = template_score == 8 and st_bull_d and (vcp_breakout or pullback_signal) and sector_rs_score > 50
-tier_b      = template_score >= 7 and st_bull_d
+risk_dollars     = i_account_nav * (i_risk_trend_pct / 100)
+shares_probe_raw = r_value > 0 ? math.floor(risk_dollars / r_value) : 0
+shares_target_raw = math.floor(shares_probe_raw / 0.5)
 
-conviction  = tier_a_plus ? "A+" : tier_a ? "A" : tier_b ? "B" : "None"
-max_nav_pct = tier_a_plus ? 20.0 : tier_a ? 17.5 : tier_b ? 12.5 : 0.0
+// Enforce max position % NAV
+max_shares_nav = entry_price > 0 ? math.floor((i_account_nav * i_max_pos_pct / 100) / entry_price) : 0
+shares_target  = math.min(shares_target_raw, max_shares_nav)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 9: TRADE PLAN CALCULATOR
-// ═══════════════════════════════════════════════════════════════════════════════
-
-entry_price    = i_entry_price == 0 ? close : i_entry_price
-stop_mult      = atr_pct <= i_atr_vol_thresh ? i_atr_low_mult : i_atr_high_mult
-raw_stop       = entry_price - (stop_mult * atr_val)
-max_stop       = entry_price * (1 - i_max_stop_pct / 100)
-initial_stop   = math.max(raw_stop, max_stop)
-
-r_value        = entry_price - initial_stop
-stop_pct       = (entry_price - initial_stop) / entry_price * 100
-
-// Position sizing
-risk_dollars   = i_account_nav * (i_risk_trend_pct / 100)
-shares_probe   = r_value > 0 ? math.floor(risk_dollars / r_value) : 0
-probe_value    = shares_probe * entry_price
-probe_pct_nav  = probe_value / i_account_nav * 100
-
-// Scaling levels
-shares_target  = math.floor(shares_probe / 0.5)
+// Recalculate from capped target
+shares_probe   = math.floor(shares_target * 0.5)
 shares_confirm = math.floor(shares_target * 0.30)
 shares_load    = shares_target - shares_probe - shares_confirm
 
-confirm_price  = entry_price * 1.025
-load_price     = entry_price * 1.05
-
-half_atr               = atr_val / 2
-stop_after_confirm     = initial_stop + half_atr
-stop_after_load        = stop_after_confirm + half_atr
-
-// Full position value & risk
-full_value     = shares_target * entry_price
-full_pct_nav   = full_value / i_account_nav * 100
-full_risk      = shares_target * r_value
-full_risk_pct  = full_risk / i_account_nav * 100
+confirm_price = entry_price * 1.025
+load_price    = entry_price * 1.05
 
 // R-stage levels
 breakeven_trigger = entry_price + r_value
 trail_start       = entry_price + (2 * r_value)
 wide_trail_start  = entry_price + (3 * r_value)
 
-// Cap position sizing
-cap_risk_dollars = i_account_nav * (i_risk_cap_pct / 100)
-cap_stop_dist    = entry_price * 0.08
-cap_shares       = cap_stop_dist > 0 ? math.floor(cap_risk_dollars / cap_stop_dist) : 0
-
-// Determine entry type description
-entry_type_str = pullback_signal ? "Pullback to 21-EMA" : vcp_breakout ? "VCP Breakout" : vwap_signal ? "VWAP Retest" : earnings_gap ? "Post-Earnings Gap" : cap_entry ? "RSI(2) Capitulation" : "Manual/Pending"
-
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 10: ANCHORED VWAP
+// ANCHORED VWAP
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Auto-detect breakout: 52-week high on above-average volume
+use_manual = i_vwap_mode == "Manual" or i_vwap_mode == "Both"
+use_auto   = i_vwap_mode == "Auto-Detect" or i_vwap_mode == "Both"
+
 auto_breakout = ta.crossover(close, high_52w[1]) and vol_breakout
 var int auto_anchor_time = na
 if auto_breakout
     auto_anchor_time := time
 
-// Determine anchor time based on mode
-use_manual = i_vwap_mode == "Manual" or i_vwap_mode == "Both"
-use_auto   = i_vwap_mode == "Auto-Detect" or i_vwap_mode == "Both"
+var float avwap_pv_m = 0.0, var float avwap_vol_m = 0.0, var float avwap_manual = na
+if use_manual and time >= i_vwap_date
+    if time[1] < i_vwap_date or barstate.isfirst
+        avwap_pv_m := 0.0
+        avwap_vol_m := 0.0
+    avwap_pv_m  += hlc3 * volume
+    avwap_vol_m += volume
+    avwap_manual := avwap_vol_m > 0 ? avwap_pv_m / avwap_vol_m : na
 
-// Anchored VWAP calculation (manual)
-var float avwap_sum_pv_m  = 0.0
-var float avwap_sum_vol_m = 0.0
-var float avwap_manual    = na
-if use_manual
-    if time >= i_vwap_date
-        if time[1] < i_vwap_date or barstate.isfirst
-            avwap_sum_pv_m  := 0.0
-            avwap_sum_vol_m := 0.0
-        avwap_sum_pv_m  += hlc3 * volume
-        avwap_sum_vol_m += volume
-        avwap_manual    := avwap_sum_vol_m > 0 ? avwap_sum_pv_m / avwap_sum_vol_m : na
-
-// Anchored VWAP calculation (auto)
-var float avwap_sum_pv_a  = 0.0
-var float avwap_sum_vol_a = 0.0
-var float avwap_auto      = na
-if use_auto and not na(auto_anchor_time)
-    if time >= auto_anchor_time
-        if time[1] < auto_anchor_time
-            avwap_sum_pv_a  := 0.0
-            avwap_sum_vol_a := 0.0
-        avwap_sum_pv_a  += hlc3 * volume
-        avwap_sum_vol_a += volume
-        avwap_auto      := avwap_sum_vol_a > 0 ? avwap_sum_pv_a / avwap_sum_vol_a : na
+var float avwap_pv_a = 0.0, var float avwap_vol_a = 0.0, var float avwap_auto = na
+if use_auto and not na(auto_anchor_time) and time >= auto_anchor_time
+    if time[1] < auto_anchor_time
+        avwap_pv_a := 0.0
+        avwap_vol_a := 0.0
+    avwap_pv_a  += hlc3 * volume
+    avwap_vol_a += volume
+    avwap_auto  := avwap_vol_a > 0 ? avwap_pv_a / avwap_vol_a : na
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 11: CLIMAX WARNING DETECTION
+// VISUAL OVERLAYS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-rapid_advance  = close / ta.lowest(close, 15) > 1.25
-exhaustion_gap = open > high[1] and volume > vol_sma50 * 2.5
-up_days_count  = math.sum(close > open ? 1 : 0, 10)
-high_up_pct    = up_days_count >= 8
+// --- Moving Averages ---
+plot(i_show_ma ? sma50  : na, "SMA 50",  color=color.new(#2196F3, 20), linewidth=1)
+plot(i_show_ma ? sma150 : na, "SMA 150", color=color.new(#FF9800, 20), linewidth=1)
+plot(i_show_ma ? sma200 : na, "SMA 200", color=color.new(#F44336, 20), linewidth=1)
+plot(i_show_ma ? ema21  : na, "EMA 21",  color=color.new(#4CAF50, 10), linewidth=1)
 
-climax_warning = rapid_advance or exhaustion_gap or high_up_pct
+// --- SuperTrend ---
+plot(i_show_supertrend ? st_line_d : na, "ST Daily",  color=st_bull_d ? color.new(#00E676,0) : color.new(#FF5252,0), linewidth=2, style=plot.style_linebr)
+plot(i_show_supertrend ? st_line_w : na, "ST Weekly", color=st_bull_w ? color.new(#00E676,50) : color.new(#FF5252,50), linewidth=3, style=plot.style_linebr)
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 12: VISUAL OVERLAYS
-// ═══════════════════════════════════════════════════════════════════════════════
+// --- Extension Bands ---
+plot(i_show_ext_bands ? ema21 * 1.10 : na, "+10% EMA21", color=color.new(#FF9800, 70), linewidth=1)
+plot(i_show_ext_bands ? sma50 * 1.15 : na, "+15% SMA50", color=color.new(#FF1744, 70), linewidth=1)
 
-// --- 12.1 Moving Averages ---
-plot(i_show_ma ? sma50  : na, "SMA 50",  color=color.new(#2196F3, 0), linewidth=1)
-plot(i_show_ma ? sma150 : na, "SMA 150", color=color.new(#FF9800, 0), linewidth=1)
-plot(i_show_ma ? sma200 : na, "SMA 200", color=color.new(#F44336, 0), linewidth=1)
-plot(i_show_ma ? ema21  : na, "EMA 21",  color=color.new(#4CAF50, 0), linewidth=1, style=plot.style_line)
-
-// --- 12.2 SuperTrend Lines ---
-st_color_d = st_bull_d ? color.new(#00E676, 0) : color.new(#FF5252, 0)
-st_color_w = st_bull_w ? color.new(#00E676, 40) : color.new(#FF5252, 40)
-plot(i_show_supertrend ? st_line_d : na, "SuperTrend Daily", color=st_color_d, linewidth=2, style=plot.style_linebr)
-plot(i_show_supertrend ? st_line_w : na, "SuperTrend Weekly", color=st_color_w, linewidth=3, style=plot.style_linebr)
-
-// --- 12.3 Extension Bands ---
-ext_10_ema21 = ema21 * 1.10
-ext_15_sma50 = sma50 * 1.15
-p_ext_ema = plot(i_show_ext_bands ? ext_10_ema21 : na, "Ext 10% above 21-EMA", color=color.new(#FF9800, 70), linewidth=1, style=plot.style_line)
-p_ext_sma = plot(i_show_ext_bands ? ext_15_sma50 : na, "Ext 15% above 50-SMA", color=color.new(#FF1744, 70), linewidth=1, style=plot.style_line)
-
-// --- 12.4 Entry/Stop/R-Level Lines (only when GO) ---
-show_levels = i_show_entry_stop and verdict_go and barstate.islast
-plot_entry   = show_levels ? entry_price : na
-plot_stop    = show_levels ? initial_stop : na
-plot_be      = show_levels ? breakeven_trigger : na
-plot_2r      = show_levels ? trail_start : na
-plot_3r      = show_levels ? wide_trail_start : na
-
-plot(plot_entry, "Entry", color=color.new(#2196F3, 0), linewidth=2, style=plot.style_circles, offset=0, show_last=1)
-plot(plot_stop,  "Stop",  color=color.new(#FF1744, 0), linewidth=2, style=plot.style_cross, offset=0, show_last=1)
-
-// Draw horizontal lines for levels when on last bar
-if barstate.islast and show_levels
-    l_entry = line.new(bar_index - 20, entry_price, bar_index + 5, entry_price, color=color.new(#2196F3, 30), width=2, style=line.style_solid)
-    l_stop  = line.new(bar_index - 20, initial_stop, bar_index + 5, initial_stop, color=color.new(#FF1744, 30), width=2, style=line.style_dashed)
-    l_be    = line.new(bar_index - 10, breakeven_trigger, bar_index + 5, breakeven_trigger, color=color.new(#4CAF50, 50), width=1, style=line.style_dotted)
-    l_2r    = line.new(bar_index - 10, trail_start, bar_index + 5, trail_start, color=color.new(#4CAF50, 50), width=1, style=line.style_dotted)
-    l_3r    = line.new(bar_index - 10, wide_trail_start, bar_index + 5, wide_trail_start, color=color.new(#4CAF50, 50), width=1, style=line.style_dotted)
-
-    // Labels for R-levels
-    label.new(bar_index + 6, entry_price, "Entry", style=label.style_label_left, color=color.new(#2196F3, 80), textcolor=color.new(#FFFFFF, 0), size=size.small)
-    label.new(bar_index + 6, initial_stop, "Stop", style=label.style_label_left, color=color.new(#FF1744, 80), textcolor=color.new(#FFFFFF, 0), size=size.small)
-    label.new(bar_index + 6, breakeven_trigger, "+1R BE", style=label.style_label_left, color=color.new(#4CAF50, 80), textcolor=color.new(#FFFFFF, 0), size=size.small)
-    label.new(bar_index + 6, trail_start, "+2R Trail", style=label.style_label_left, color=color.new(#4CAF50, 80), textcolor=color.new(#FFFFFF, 0), size=size.small)
-    label.new(bar_index + 6, wide_trail_start, "+3R Wide", style=label.style_label_left, color=color.new(#4CAF50, 80), textcolor=color.new(#FFFFFF, 0), size=size.small)
-
-// --- 12.5 Anchored VWAP plots ---
+// --- Anchored VWAP ---
 plot(use_manual ? avwap_manual : na, "AVWAP Manual", color=color.new(#AB47BC, 0), linewidth=2)
-plot(use_auto ? avwap_auto : na, "AVWAP Auto", color=color.new(#7C4DFF, 0), linewidth=2, style=plot.style_line)
+plot(use_auto ? avwap_auto : na, "AVWAP Auto", color=color.new(#7C4DFF, 0), linewidth=2)
 
-// --- 12.6 Signal Markers ---
-plotshape(i_show_signals and pullback_signal and not entry_blocked ? low * 0.998 : na, "Pullback Entry", shape.triangleup, location.absolute, color.new(#00E676, 0), size=size.small)
-plotshape(i_show_signals and vcp_breakout and not entry_blocked ? low * 0.998 : na, "VCP Breakout", shape.triangleup, location.absolute, color.new(#2979FF, 0), size=size.small)
-plotshape(i_show_signals and vwap_signal and not entry_blocked ? low * 0.998 : na, "VWAP Retest", shape.triangleup, location.absolute, color.new(#AB47BC, 0), size=size.small)
-plotshape(i_show_signals and cap_entry ? low * 0.998 : na, "CAP Entry", shape.triangleup, location.absolute, color.new(#FFD600, 0), size=size.small)
-plotshape(i_show_signals and climax_warning ? high * 1.002 : na, "Climax Warning", shape.triangledown, location.absolute, color.new(#FF1744, 0), size=size.small)
-plotshape(i_show_signals and entry_blocked and (pullback_signal or vcp_breakout or vwap_signal) ? high * 1.002 : na, "Entry Blocked", shape.xcross, location.absolute, color.new(#FF9800, 0), size=size.small)
+// --- Entry/Stop/R-Level Lines (last bar only) ---
+show_lines = i_show_levels and barstate.islast
+if show_lines
+    line.new(bar_index - 20, entry_price, bar_index + 5, entry_price,        color=color.new(#2196F3, 20), width=2, style=line.style_solid)
+    line.new(bar_index - 20, initial_stop, bar_index + 5, initial_stop,      color=color.new(#FF1744, 20), width=2, style=line.style_dashed)
+    line.new(bar_index - 10, breakeven_trigger, bar_index + 5, breakeven_trigger, color=color.new(#4CAF50, 40), width=1, style=line.style_dotted)
+    line.new(bar_index - 10, trail_start, bar_index + 5, trail_start,        color=color.new(#4CAF50, 40), width=1, style=line.style_dotted)
+    line.new(bar_index - 10, wide_trail_start, bar_index + 5, wide_trail_start, color=color.new(#4CAF50, 40), width=1, style=line.style_dotted)
 
-// --- 12.7 Background Tints ---
-regime_bg = regime_green ? color.new(#00C853, 95) : regime_red ? color.new(#FF1744, 95) : color.new(#FFD600, 96)
-bgcolor(i_show_bg_regime ? regime_bg : na, title="Regime Background")
+    entry_label = i_entry_price == 0 ? "Entry" : "Entry (custom)"
+    label.new(bar_index + 6, entry_price,        entry_label, style=label.style_label_left, color=color.new(#2196F3, 80), textcolor=#FFFFFF, size=size.small)
+    label.new(bar_index + 6, initial_stop,       "Stop",      style=label.style_label_left, color=color.new(#FF1744, 80), textcolor=#FFFFFF, size=size.small)
+    label.new(bar_index + 6, breakeven_trigger,  "+1R BE",    style=label.style_label_left, color=color.new(#4CAF50, 80), textcolor=#FFFFFF, size=size.small)
+    label.new(bar_index + 6, trail_start,        "+2R Trail", style=label.style_label_left, color=color.new(#4CAF50, 80), textcolor=#FFFFFF, size=size.small)
+    label.new(bar_index + 6, wide_trail_start,   "+3R Wide",  style=label.style_label_left, color=color.new(#4CAF50, 80), textcolor=#FFFFFF, size=size.small)
 
-verdict_bg = verdict_go ? color.new(#00C853, 93) : verdict_watchlist ? color.new(#FFD600, 95) : color.new(#FF1744, 95)
-bgcolor(i_show_bg_verdict ? verdict_bg : na, title="Verdict Background")
+// --- Signal Markers (filtered by score threshold) ---
+score_ok = total_score >= i_sig_min_score
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 13: DASHBOARD TABLES
-// ═══════════════════════════════════════════════════════════════════════════════
+plotshape(i_sig_pullback and pullback_signal and not entry_blocked and score_ok ? low * 0.997 : na, "Pullback",  shape.triangleup, location.absolute, color.new(#00E676, 0), size=size.tiny)
+plotshape(i_sig_vcp      and vcp_breakout    and not entry_blocked and score_ok ? low * 0.997 : na, "VCP",       shape.triangleup, location.absolute, color.new(#2979FF, 0), size=size.tiny)
+plotshape(i_sig_vwap     and vwap_signal     and not entry_blocked and score_ok ? low * 0.997 : na, "VWAP",      shape.triangleup, location.absolute, color.new(#AB47BC, 0), size=size.tiny)
+plotshape(i_sig_gap      and earnings_gap    and score_ok                       ? low * 0.997 : na, "Gap",       shape.triangleup, location.absolute, color.new(#FFD600, 0), size=size.tiny)
+plotshape(i_sig_cap      and cap_entry                                          ? low * 0.997 : na, "CAP",       shape.triangleup, location.absolute, color.new(#FF6D00, 0), size=size.tiny)
+plotshape(i_sig_climax   and climax_warning                                     ? high * 1.003 : na, "Climax",   shape.triangledown, location.absolute, color.new(#FF1744, 0), size=size.tiny)
+plotshape(i_sig_blocked  and entry_blocked and (pullback_signal or vcp_breakout or vwap_signal) ? high * 1.003 : na, "Blocked", shape.xcross, location.absolute, color.new(#FF9800, 40), size=size.tiny)
 
-// Dark mode color palette
-c_bg_dark    = color.new(#1E1E2E, 0)
-c_bg_header  = color.new(#2A2A3E, 0)
-c_text       = color.new(#E0E0E0, 0)
-c_text_dim   = color.new(#9E9E9E, 0)
-c_green      = color.new(#00E676, 0)
-c_yellow     = color.new(#FFD600, 0)
-c_red        = color.new(#FF5252, 0)
-c_blue       = color.new(#448AFF, 0)
-c_border     = color.new(#3A3A4E, 0)
-
-// Helper function for status color
-status_color(bool ok) => ok ? c_green : c_red
-status_icon(bool ok)  => ok ? "+" : "-"
-
-// --- 13.1 Regime Dashboard Table (Top Right) ---
-if barstate.islast and i_show_regime
-    var table t_regime = table.new(position.top_right, 4, 8, bgcolor=c_bg_dark, border_width=1, border_color=c_border, frame_width=2, frame_color=c_border)
-
-    // Header
-    table.cell(t_regime, 0, 0, "REGIME DASHBOARD", text_color=c_text, bgcolor=c_bg_header, text_size=size.small, text_halign=text.align_left)
-    table.merge_cells(t_regime, 0, 0, 3, 0)
-
-    // Column headers
-    table.cell(t_regime, 0, 1, "Indicator",  text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_regime, 1, 1, "Value",      text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 2, 1, "Threshold",  text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 3, 1, "",            text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny)
-
-    // SPY vs 200 SMA
-    spy_status = spy_above_200
-    table.cell(t_regime, 0, 2, "SPY vs 200 SMA", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_regime, 1, 2, str.tostring(spy_close, "#.##"), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 2, 2, str.tostring(spy_sma200, "#.##"), text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 3, 2, spy_above_200 ? "Above" : "Below", text_color=status_color(spy_above_200), bgcolor=c_bg_dark, text_size=size.tiny)
-
-    // VIX
-    vix_stat_color = vix_low ? c_green : vix_mid ? c_yellow : c_red
-    table.cell(t_regime, 0, 3, "VIX", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_regime, 1, 3, str.tostring(vix_close, "#.#"), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 2, 3, "< 20", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 3, 3, vix_low ? "Low" : vix_mid ? "Elevated" : "High", text_color=vix_stat_color, bgcolor=c_bg_dark, text_size=size.tiny)
-
-    // VIX Term Structure
-    vts_str = vix_contango ? "Contango" : "Backwardation"
-    table.cell(t_regime, 0, 4, "VIX Term Struct", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_regime, 1, 4, str.tostring(vix_close, "#.#") + "/" + str.tostring(vix3m_close, "#.#"), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 2, 4, "Contango", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 3, 4, vts_str, text_color=vix_contango ? c_green : c_red, bgcolor=c_bg_dark, text_size=size.tiny)
-
-    // Breadth
-    b_color = breadth_strong ? c_green : breadth_weak ? c_red : c_yellow
-    table.cell(t_regime, 0, 5, "Breadth (S5TH)", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_regime, 1, 5, str.tostring(breadth, "#.#") + "%", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 2, 5, "> 50%", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 3, 5, breadth_strong ? "Strong" : breadth_weak ? "Weak" : "Mixed", text_color=b_color, bgcolor=c_bg_dark, text_size=size.tiny)
-
-    // HY OAS
-    hy_color = hy_safe ? c_green : hy_danger ? c_red : c_yellow
-    hy_str   = na(hy_oas) ? "N/A" : str.tostring(hy_oas, "#.##") + "%"
-    table.cell(t_regime, 0, 6, "HY OAS", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_regime, 1, 6, hy_str, text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 2, 6, "< 5%", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-    table.cell(t_regime, 3, 6, hy_safe ? "Safe" : hy_danger ? "Danger" : "Watch", text_color=hy_color, bgcolor=c_bg_dark, text_size=size.tiny)
-
-    // Regime summary row
-    table.cell(t_regime, 0, 7, "REGIME", text_color=c_text, bgcolor=c_bg_header, text_size=size.small, text_halign=text.align_left)
-    table.merge_cells(t_regime, 0, 7, 1, 7)
-    table.cell(t_regime, 2, 7, regime_str, text_color=regime_color, bgcolor=c_bg_header, text_size=size.small, text_halign=text.align_right)
-    table.merge_cells(t_regime, 2, 7, 3, 7)
-
-// --- 13.2 Minervini Template Table (Middle Right) ---
-if barstate.islast and i_show_template
-    var table t_template = table.new(position.middle_right, 3, 11, bgcolor=c_bg_dark, border_width=1, border_color=c_border, frame_width=2, frame_color=c_border)
-
-    // Header
-    table.cell(t_template, 0, 0, "MINERVINI TREND TEMPLATE", text_color=c_text, bgcolor=c_bg_header, text_size=size.small, text_halign=text.align_left)
-    table.merge_cells(t_template, 0, 0, 2, 0)
-
-    // Column headers
-    table.cell(t_template, 0, 1, "#", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny)
-    table.cell(t_template, 1, 1, "Criterion", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_template, 2, 1, "Status", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny)
-
-    // Criteria rows
-    criteria_labels = array.from("Price > 150 & 200 MA", "150 MA > 200 MA", "200 MA rising 5mo", "50 MA > 150 & 200 MA", "Price > 50 MA", "25%+ above 52w low", "Within 25% of 52w high", "RS >= 70")
-    criteria_pass   = array.from(t1, t2, t3, t4, t5, t6, t7, t8)
-
-    for i = 0 to 7
-        row = i + 2
-        pass = array.get(criteria_pass, i)
-        table.cell(t_template, 0, row, str.tostring(i + 1), text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny)
-        table.cell(t_template, 1, row, array.get(criteria_labels, i), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-        table.cell(t_template, 2, row, pass ? "PASS" : "FAIL", text_color=pass ? c_green : c_red, bgcolor=c_bg_dark, text_size=size.tiny)
-
-    // Score row
-    score_color = template_score == 8 ? c_green : template_score >= 6 ? c_yellow : c_red
-    table.cell(t_template, 0, 10, "", bgcolor=c_bg_header, text_size=size.tiny)
-    table.cell(t_template, 1, 10, "SCORE", text_color=c_text, bgcolor=c_bg_header, text_size=size.small, text_halign=text.align_left)
-    table.cell(t_template, 2, 10, str.tostring(template_score) + " / 8", text_color=score_color, bgcolor=c_bg_header, text_size=size.small)
-
-// --- 13.3 Go/No-Go Scorecard (Bottom Right) ---
-if barstate.islast and i_show_scorecard
-    var table t_score = table.new(position.bottom_right, 3, 12, bgcolor=c_bg_dark, border_width=1, border_color=c_border, frame_width=2, frame_color=c_border)
-
-    // Header with verdict
-    table.cell(t_score, 0, 0, "GO / NO-GO SCORECARD", text_color=c_text, bgcolor=c_bg_header, text_size=size.small, text_halign=text.align_left)
-    table.merge_cells(t_score, 0, 0, 2, 0)
-
-    // Column headers
-    table.cell(t_score, 0, 1, "Check", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_score, 1, 1, "Pts", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny)
-    table.cell(t_score, 2, 1, "Max", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny)
-
-    // Scoring rows
-    sc_names = array.from("Market Regime", "Trend Alignment", "Sector RS", "Setup Quality", "Catalyst", "Risk:Reward", "Extension Check", "Portfolio Fit")
-    sc_pts   = array.from(pts_regime, pts_trend, pts_sector, pts_setup, pts_catalyst, pts_rr, pts_extension, pts_portfolio)
-    sc_max   = array.from(2, 2, 1, 2, 1, 2, 1, 1)
-
-    for i = 0 to 7
-        row = i + 2
-        pts = array.get(sc_pts, i)
-        mx  = array.get(sc_max, i)
-        pts_color = pts == mx ? c_green : pts > 0 ? c_yellow : c_red
-        table.cell(t_score, 0, row, array.get(sc_names, i), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-        table.cell(t_score, 1, row, str.tostring(pts), text_color=pts_color, bgcolor=c_bg_dark, text_size=size.tiny)
-        table.cell(t_score, 2, row, str.tostring(mx), text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny)
-
-    // Total row
-    table.cell(t_score, 0, 10, "TOTAL", text_color=c_text, bgcolor=c_bg_header, text_size=size.small, text_halign=text.align_left)
-    table.cell(t_score, 1, 10, str.tostring(total_score), text_color=verdict_color, bgcolor=c_bg_header, text_size=size.small)
-    table.cell(t_score, 2, 10, "12", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.small)
-
-    // Verdict row
-    table.cell(t_score, 0, 11, "VERDICT", text_color=c_text, bgcolor=verdict_color, text_size=size.small, text_halign=text.align_left)
-    table.cell(t_score, 1, 11, verdict_str, text_color=color.new(#FFFFFF, 0), bgcolor=verdict_color, text_size=size.small)
-    table.cell(t_score, 2, 11, "Tier: " + conviction, text_color=color.new(#FFFFFF, 0), bgcolor=verdict_color, text_size=size.small)
-
-// --- 13.4 Trade Plan Table (Bottom Left) ---
-if barstate.islast and i_show_tradeplan
-    var table t_plan = table.new(position.bottom_left, 2, 22, bgcolor=c_bg_dark, border_width=1, border_color=c_border, frame_width=2, frame_color=c_border)
-
-    // Header
-    table.cell(t_plan, 0, 0, "TRADE PLAN: " + syminfo.ticker, text_color=c_text, bgcolor=verdict_color, text_size=size.small, text_halign=text.align_left)
-    table.cell(t_plan, 1, 0, verdict_str + " | " + str.tostring(total_score) + "/12 | " + conviction, text_color=color.new(#FFFFFF, 0), bgcolor=verdict_color, text_size=size.small, text_halign=text.align_right)
-
-    // Entry info
-    mode_str = cap_entry ? "CAPITULATION" : "TREND"
-    table.cell(t_plan, 0, 1, "Entry Mode", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 1, mode_str, text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 2, "Entry Type", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 2, entry_type_str, text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 3, "Entry Price", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 3, "$" + str.tostring(entry_price, "#.##"), text_color=c_blue, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 4, "Initial Stop", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 4, "$" + str.tostring(initial_stop, "#.##") + " (" + str.tostring(stop_pct, "#.#") + "% | " + str.tostring(stop_mult, "#.#") + "x ATR)", text_color=c_red, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 5, "R per Share", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 5, "$" + str.tostring(r_value, "#.##"), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    // Separator
-    table.cell(t_plan, 0, 6, "--- POSITION SIZING ---", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_left)
-    table.merge_cells(t_plan, 0, 6, 1, 6)
-
-    table.cell(t_plan, 0, 7, "Probe (50%)", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 7, str.tostring(shares_probe) + " shs | $" + str.tostring(probe_value, "#,###"), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 8, "Confirm (30%)", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 8, str.tostring(shares_confirm) + " shs @ $" + str.tostring(confirm_price, "#.##"), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 9, "Load (20%)", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 9, str.tostring(shares_load) + " shs @ $" + str.tostring(load_price, "#.##"), text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 10, "Full Position", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 10, "$" + str.tostring(full_value, "#,###") + " (" + str.tostring(full_pct_nav, "#.#") + "% NAV)", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    // Risk section
-    table.cell(t_plan, 0, 11, "--- RISK ---", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_left)
-    table.merge_cells(t_plan, 0, 11, 1, 11)
-
-    table.cell(t_plan, 0, 12, "Risk (Probe)", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 12, "$" + str.tostring(risk_dollars, "#,###") + " (" + str.tostring(i_risk_trend_pct, "#.#") + "% NAV)", text_color=c_red, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 13, "Risk (Full)", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 13, "$" + str.tostring(full_risk, "#,###") + " (" + str.tostring(full_risk_pct, "#.#") + "% NAV)", text_color=c_red, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 14, "R:R", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    rr_color = rr_ratio >= 5 ? c_green : rr_ratio >= 3 ? c_yellow : c_red
-    table.cell(t_plan, 1, 14, str.tostring(rr_ratio, "#.#") + " : 1", text_color=rr_color, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    // R-stage exits
-    table.cell(t_plan, 0, 15, "--- R-STAGE EXITS ---", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_left)
-    table.merge_cells(t_plan, 0, 15, 1, 15)
-
-    table.cell(t_plan, 0, 16, "+1R (Breakeven)", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 16, "$" + str.tostring(breakeven_trigger, "#.##") + " -> stop to $" + str.tostring(entry_price, "#.##"), text_color=c_green, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 17, "+2R (Trail)", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 17, "$" + str.tostring(trail_start, "#.##") + " -> 15%/21-EMA trail", text_color=c_green, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 18, "+3R (Wide)", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 18, "$" + str.tostring(wide_trail_start, "#.##") + " -> 20% trail", text_color=c_green, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    table.cell(t_plan, 0, 19, "Time Stop", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 19, "10 trading days if < +1R", text_color=c_yellow, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
-    // Additional info
-    table.cell(t_plan, 0, 20, "--- INFO ---", text_color=c_text_dim, bgcolor=c_bg_header, text_size=size.tiny, text_halign=text.align_left)
-    table.merge_cells(t_plan, 0, 20, 1, 20)
-
-    table.cell(t_plan, 0, 21, "ADX / RS / VolRatio", text_color=c_text_dim, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_left)
-    table.cell(t_plan, 1, 21, str.tostring(adx_val, "#.#") + " / " + str.tostring(rs_score) + " / " + str.tostring(vol_ratio, "#.##") + "x", text_color=c_text, bgcolor=c_bg_dark, text_size=size.tiny, text_halign=text.align_right)
-
+// --- Background Tint ---
+regime_bg = regime_green ? color.new(#00C853, 96) : regime_red ? color.new(#FF1744, 96) : color.new(#FFD600, 97)
+bgcolor(i_show_bg_regime ? regime_bg : na, title="Regime BG")
 
 // ═══════════════════════════════════════════════════════════════════════════════
-// SECTION 14: ALERT CONDITIONS
+// ALERT CONDITIONS
 // ═══════════════════════════════════════════════════════════════════════════════
 
-// Entry alerts
 alertcondition(pullback_signal and not entry_blocked and total_score >= i_min_score, "TREND: Pullback Entry", "TradeGuard GO: Pullback to 21-EMA on {{ticker}}")
 alertcondition(vcp_breakout and not entry_blocked and total_score >= i_min_score, "TREND: VCP Breakout", "TradeGuard GO: VCP Breakout on {{ticker}}")
 alertcondition(vwap_signal and not entry_blocked and total_score >= i_min_score, "TREND: VWAP Retest", "TradeGuard GO: VWAP Retest on {{ticker}}")
 alertcondition(cap_entry, "CAPITULATION Entry", "TradeGuard CAP: RSI(2) < 5 on {{ticker}}, VIX > 30")
-
-// Exit / warning alerts
-alertcondition(climax_warning, "Climax Warning", "TradeGuard: Climax signals on {{ticker}} - tighten stop")
-
-// Regime alerts
-alertcondition(regime_changed_to_red, "Regime -> RED", "TradeGuard REGIME: RED - halt TREND entries, activate CAP scanner")
+alertcondition(climax_warning, "Climax Warning", "TradeGuard: Climax signals on {{ticker}}")
+alertcondition(regime_changed_to_red, "Regime -> RED", "TradeGuard REGIME: RED - halt TREND entries")
 alertcondition(regime_changed_to_green, "Regime -> GREEN", "TradeGuard REGIME: GREEN - full operations")
-
-// Extension / anti-chase alerts
-alertcondition(extended_21ema, "Extended > 10% above 21-EMA", "TradeGuard: {{ticker}} extended > 10% above 21-EMA - NO BUY")
-alertcondition(entry_blocked, "Entry Blocked", "TradeGuard: Entry blocked on {{ticker}} - anti-chase filter active")
-
-// VCP setup alert (before breakout)
-alertcondition(vcp_setup and not vcp_breakout, "VCP Setup Detected", "TradeGuard: VCP setup forming on {{ticker}} - watch for breakout")
-
-// Earnings gap alert
-alertcondition(earnings_gap, "Post-Earnings Gap", "TradeGuard: Large gap-up on volume on {{ticker}} - potential earnings reaction")
-
-// Template score change
-alertcondition(template_score == 8 and template_score[1] < 8, "Template 8/8 Achieved", "TradeGuard: {{ticker}} now 8/8 Minervini Template - full trend alignment")
-alertcondition(template_score < i_min_template and template_score[1] >= i_min_template, "Template Score Dropped", "TradeGuard: {{ticker}} template dropped below minimum threshold")
-
-// ═══════════════════════════════════════════════════════════════════════════════
-// END OF SCRIPT 1
-// ═══════════════════════════════════════════════════════════════════════════════
+alertcondition(extended_21ema, "Extended > 10% above 21-EMA", "TradeGuard: {{ticker}} extended - NO BUY")
+alertcondition(entry_blocked, "Entry Blocked", "TradeGuard: Anti-chase filter active on {{ticker}}")
+alertcondition(vcp_setup and not vcp_breakout, "VCP Setup Detected", "TradeGuard: VCP forming on {{ticker}}")
+alertcondition(earnings_gap, "Post-Earnings Gap", "TradeGuard: Gap-up on volume on {{ticker}}")
+alertcondition(template_score == 8 and template_score[1] < 8, "Template 8/8", "TradeGuard: {{ticker}} now 8/8 Minervini")
+alertcondition(template_score < i_min_template and template_score[1] >= i_min_template, "Template Dropped", "TradeGuard: {{ticker}} template below threshold")
