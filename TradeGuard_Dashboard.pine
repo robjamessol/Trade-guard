@@ -224,30 +224,41 @@ if barstate.islast and i_show_regime
     table.cell(tr, 0, 0, "MARKET REGIME", text_color=c_txt, bgcolor=c_bg_h, text_size=size.small)
     table.merge_cells(tr, 0, 0, 2, 0)
 
-    // Row helper
-    _rc(int r, string lbl, string val, color vc, string stat, color sc) =>
-        table.cell(tr, 0, r, lbl,  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
-        table.cell(tr, 1, r, val,  text_color=vc,    bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
-        table.cell(tr, 2, r, stat, text_color=sc,    bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
-
+    // SPY vs 200
     spy_c = spy_above_200 ? c_grn : c_red
-    _rc(1, "SPY vs 200", str.tostring(spy_close,"#.##") + " / " + str.tostring(spy_sma200,"#.##"), c_txt, spy_above_200 ? "Above" : "Below", spy_c)
+    table.cell(tr, 0, 1, "SPY vs 200",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tr, 1, 1, str.tostring(spy_close,"#.##") + " / " + str.tostring(spy_sma200,"#.##"), text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(tr, 2, 1, spy_above_200 ? "Above" : "Below", text_color=spy_c, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
+    // VIX
     vix_c = vix_low ? c_grn : vix_mid ? c_yel : c_red
-    _rc(2, "VIX", str.tostring(vix_close,"#.#"), c_txt, vix_low ? "Low" : vix_mid ? "Elevated" : "High", vix_c)
+    table.cell(tr, 0, 2, "VIX",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tr, 1, 2, str.tostring(vix_close,"#.#"), text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(tr, 2, 2, vix_low ? "Low" : vix_mid ? "Elevated" : "High", text_color=vix_c, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
+    // Term Structure
     vts_c = vix_contango ? c_grn : c_red
-    _rc(3, "Term Structure", str.tostring(vix_close,"#.#") + " / " + str.tostring(vix3m_close,"#.#"), c_txt, vix_contango ? "Contango" : "Backwrd", vts_c)
+    table.cell(tr, 0, 3, "Term Structure",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tr, 1, 3, str.tostring(vix_close,"#.#") + " / " + str.tostring(vix3m_close,"#.#"), text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(tr, 2, 3, vix_contango ? "Contango" : "Backwrd", text_color=vts_c, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
+    // Breadth
     b_c = breadth_strong ? c_grn : breadth_weak ? c_red : c_yel
-    _rc(4, "Breadth S5TH", str.tostring(breadth,"#.#") + "%", c_txt, breadth_strong ? "Strong" : breadth_weak ? "Weak" : "Mixed", b_c)
+    table.cell(tr, 0, 4, "Breadth S5TH",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tr, 1, 4, str.tostring(breadth,"#.#") + "%", text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(tr, 2, 4, breadth_strong ? "Strong" : breadth_weak ? "Weak" : "Mixed", text_color=b_c, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
+    // HY OAS
     hy_c = hy_safe ? c_grn : hy_danger ? c_red : c_yel
-    _rc(5, "HY OAS", na(hy_oas) ? "N/A" : str.tostring(hy_oas,"#.##") + "%", c_txt, hy_safe ? "Safe" : hy_danger ? "Danger" : "Watch", hy_c)
+    table.cell(tr, 0, 5, "HY OAS",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tr, 1, 5, na(hy_oas) ? "N/A" : str.tostring(hy_oas,"#.##") + "%", text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(tr, 2, 5, hy_safe ? "Safe" : hy_danger ? "Danger" : "Watch", text_color=hy_c, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
-    // Sector RS row
+    // Sector RS
     sec_c = sector_strong ? c_grn : sector_rs_score > 40 ? c_yel : c_red
-    _rc(6, "Sector RS (2w)", str.tostring(sector_rs_st,"#.#") + "%", c_txt, "Score: " + str.tostring(sector_rs_score), sec_c)
+    table.cell(tr, 0, 6, "Sector RS (2w)",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tr, 1, 6, str.tostring(sector_rs_st,"#.#") + "%", text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+    table.cell(tr, 2, 6, "Score: " + str.tostring(sector_rs_score), text_color=sec_c, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
     // Regime summary
     table.cell(tr, 0, 7, "REGIME", text_color=c_txt, bgcolor=c_bg_h, text_size=size.small, text_halign=text.align_left)
@@ -329,41 +340,59 @@ if barstate.islast and i_show_tradeplan
     table.cell(tp, 0, 0, "TRADE PLAN: " + entry_label, text_color=#FFFFFF, bgcolor=verdict_color, text_size=size.small, text_halign=text.align_left)
     table.cell(tp, 1, 0, verdict_str + " | " + str.tostring(total_score) + "/12 | " + conviction, text_color=#FFFFFF, bgcolor=verdict_color, text_size=size.small, text_halign=text.align_right)
 
-    // Helper
-    _tp(int r, string lbl, string val, color vc) =>
-        table.cell(tp, 0, r, lbl, text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
-        table.cell(tp, 1, r, val, text_color=vc,    bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
-
     mode_str = cap_entry ? "CAPITULATION" : "TREND"
-    _tp(1, "Mode / Type", mode_str + " | " + entry_type_str, c_txt)
-    _tp(2, "Entry Price",  "$" + str.tostring(entry_price, "#.##"), c_blu)
-    _tp(3, "Initial Stop", "$" + str.tostring(initial_stop, "#.##") + " (" + str.tostring(stop_pct, "#.#") + "% | " + str.tostring(stop_mult, "#.#") + "x ATR)", c_red)
-    _tp(4, "R per Share",  "$" + str.tostring(r_value, "#.##"), c_txt)
+    table.cell(tp, 0, 1, "Mode / Type",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 1, mode_str + " | " + entry_type_str, text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 2, "Entry Price",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 2, "$" + str.tostring(entry_price, "#.##"), text_color=c_blu, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 3, "Initial Stop", text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 3, "$" + str.tostring(initial_stop, "#.##") + " (" + str.tostring(stop_pct, "#.#") + "% | " + str.tostring(stop_mult, "#.#") + "x ATR)", text_color=c_red, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 4, "R per Share",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 4, "$" + str.tostring(r_value, "#.##"), text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
     // Sizing section
     table.cell(tp, 0, 5, "POSITION SIZING", text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_left)
     cap_note = is_nav_capped ? " [NAV capped]" : ""
     table.cell(tp, 1, 5, cap_note, text_color=c_yel, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_right)
 
-    _tp(6,  "Probe (50%)",   str.tostring(shares_probe) + " shs | $" + str.tostring(probe_value, "#,###") + " (" + str.tostring(probe_pct_nav, "#.#") + "% NAV)", c_txt)
-    _tp(7,  "Confirm (30%)", str.tostring(shares_confirm) + " shs @ $" + str.tostring(confirm_price, "#.##"), c_txt)
-    _tp(8,  "Load (20%)",    str.tostring(shares_load) + " shs @ $" + str.tostring(load_price, "#.##"), c_txt)
-    _tp(9,  "Full Position", str.tostring(shares_target) + " shs | $" + str.tostring(full_value, "#,###") + " (" + str.tostring(full_pct_nav, "#.#") + "% NAV)", c_txt)
+    table.cell(tp, 0, 6, "Probe (50%)",    text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 6, str.tostring(shares_probe) + " shs | $" + str.tostring(probe_value, "#,###") + " (" + str.tostring(probe_pct_nav, "#.#") + "% NAV)", text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 7, "Confirm (30%)",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 7, str.tostring(shares_confirm) + " shs @ $" + str.tostring(confirm_price, "#.##"), text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 8, "Load (20%)",     text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 8, str.tostring(shares_load) + " shs @ $" + str.tostring(load_price, "#.##"), text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 9, "Full Position",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 9, str.tostring(shares_target) + " shs | $" + str.tostring(full_value, "#,###") + " (" + str.tostring(full_pct_nav, "#.#") + "% NAV)", text_color=c_txt, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
     // Risk section
     table.cell(tp, 0, 10, "RISK", text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_left)
     table.cell(tp, 1, 10, "",     text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny)
 
-    _tp(11, "Risk (Probe)", "$" + str.tostring(probe_risk, "#,###") + " (" + str.tostring(probe_risk_pct, "#.#") + "% NAV)", c_red)
-    _tp(12, "Risk (Full)",  "$" + str.tostring(full_risk, "#,###") + " (" + str.tostring(full_risk_pct, "#.#") + "% NAV)", c_red)
+    table.cell(tp, 0, 11, "Risk (Probe)",  text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 11, "$" + str.tostring(probe_risk, "#,###") + " (" + str.tostring(probe_risk_pct, "#.#") + "% NAV)", text_color=c_red, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 12, "Risk (Full)",   text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 12, "$" + str.tostring(full_risk, "#,###") + " (" + str.tostring(full_risk_pct, "#.#") + "% NAV)", text_color=c_red, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
     rr_c = rr_ratio >= 5 ? c_grn : rr_ratio >= 3 ? c_yel : c_red
-    _tp(13, "R:R", str.tostring(rr_ratio, "#.#") + " : 1", rr_c)
+    table.cell(tp, 0, 13, "R:R",           text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 13, str.tostring(rr_ratio, "#.#") + " : 1", text_color=rr_c, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
 
     // R-stage exits
     table.cell(tp, 0, 14, "R-STAGE EXITS", text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny, text_halign=text.align_left)
     table.cell(tp, 1, 14, "",              text_color=c_dim, bgcolor=c_bg_h, text_size=size.tiny)
 
-    _tp(15, "+1R Breakeven", "$" + str.tostring(breakeven_trigger, "#.##") + " -> stop to $" + str.tostring(entry_price, "#.##"), c_grn)
-    _tp(16, "+2R Trail",     "$" + str.tostring(trail_start, "#.##") + " -> 15% / 21-EMA", c_grn)
-    _tp(17, "+3R Wide",      "$" + str.tostring(wide_trail_start, "#.##") + " -> 20% trail", c_grn)
+    table.cell(tp, 0, 15, "+1R Breakeven", text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 15, "$" + str.tostring(breakeven_trigger, "#.##") + " -> stop to $" + str.tostring(entry_price, "#.##"), text_color=c_grn, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 16, "+2R Trail",     text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 16, "$" + str.tostring(trail_start, "#.##") + " -> 15% / 21-EMA", text_color=c_grn, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
+
+    table.cell(tp, 0, 17, "+3R Wide",      text_color=c_dim, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_left)
+    table.cell(tp, 1, 17, "$" + str.tostring(wide_trail_start, "#.##") + " -> 20% trail", text_color=c_grn, bgcolor=c_bg, text_size=size.tiny, text_halign=text.align_right)
