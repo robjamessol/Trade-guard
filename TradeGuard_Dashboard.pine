@@ -236,24 +236,24 @@ if barstate.islast
     // ─── ROW 1: REGIME DATA ─────────────────────────────────────────────────
     spy_lbl = "SPY " + str.tostring(spy_close, "#.##")
     spy_c   = spy_above_200 ? c_pass : c_fail
-    table.cell(d, 0, 1, _d(spy_lbl),                                                              text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 1, 1, _d(spy_above_200 ? "Above 200" : "Below 200"),                            text_color=spy_c,   bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 1, _d(spy_lbl),                                                              text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 1, 1, _d(spy_above_200 ? "Above 200" : "Below 200"),                            text_color=spy_c,   bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
 
     vix_c = vix_low ? c_pass : vix_mid ? c_val : c_fail
-    table.cell(d, 2, 1, _d("VIX " + str.tostring(vix_close, "#.#")),                              text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 3, 1, _d(vix_low ? "Low" : vix_mid ? "Elevated" : "High"),                      text_color=vix_c,   bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 2, 1, _d("VIX " + str.tostring(vix_close, "#.#")),                              text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 3, 1, _d(vix_low ? "Low" : vix_mid ? "Elevated" : "High"),                      text_color=vix_c,   bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
 
     vts_c = vix_contango ? c_pass : c_fail
-    table.cell(d, 4, 1, _d("Term"),                                                                text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 5, 1, _d(vix_contango ? "Contango" : "Backwardation"),                           text_color=vts_c,   bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 4, 1, _d("Term"),                                                                text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 5, 1, _d(vix_contango ? "Contango" : "Backwardation"),                           text_color=vts_c,   bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
 
     b_c = breadth_strong ? c_pass : breadth_weak ? c_fail : c_val
-    table.cell(d, 6, 1, _d("Breadth " + str.tostring(breadth, "#.#") + "%"),                       text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 7, 1, _d(breadth_strong ? "Strong" : breadth_weak ? "Weak" : "Mixed"),           text_color=b_c,     bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 6, 1, _d("Breadth " + str.tostring(breadth, "#.#") + "%"),                       text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 7, 1, _d(breadth_strong ? "Strong" : breadth_weak ? "Weak" : "Mixed"),           text_color=b_c,     bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
 
     hy_c = hy_safe ? c_pass : hy_danger ? c_fail : c_val
-    table.cell(d, 8, 1, _d("HY " + (na(hy_oas) ? "N/A" : str.tostring(hy_oas, "#.##") + "%")),   text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 9, 1, _d(hy_safe ? "Safe" : hy_danger ? "Danger" : "Watch"),                    text_color=hy_c,    bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 8, 1, _d("HY " + (na(hy_oas) ? "N/A" : str.tostring(hy_oas, "#.##") + "%")),   text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 9, 1, _d(hy_safe ? "Safe" : hy_danger ? "Danger" : "Watch"),                    text_color=hy_c,    bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
 
     // ─── ROW 2: TEMPLATE HEADER ─────────────────────────────────────────────
     table.cell(d, 0, 2, _h("TREND TEMPLATE"), text_color=c_white, bgcolor=c_header, text_size=size.small, text_halign=text.align_left, width=W)
@@ -267,8 +267,8 @@ if barstate.islast
     t_nums = array.from("1: P>150&200", "2: 150>200", "3: 200 rising", "4: 50>150&200", "5: P>50", "6: >25% 52wL", "7: <25% 52wH", "8: RS>=70")
     for i = 0 to 7
         p = array.get(t_pass, i)
-        table.cell(d, i, 3, _d(array.get(t_nums, i)), text_color=p ? c_pass : c_fail, bgcolor=c_black, text_size=size.normal, text_halign=text.align_center, width=W)
-    table.cell(d, 8, 3, _d("RS: " + str.tostring(rs_score)), text_color=rs_score >= 70 ? c_pass : c_fail, bgcolor=c_black, text_size=size.normal, text_halign=text.align_center, width=W)
+        table.cell(d, i, 3, _d(array.get(t_nums, i)), text_color=p ? c_pass : c_fail, bgcolor=c_black, text_size=size.small, text_halign=text.align_center, width=W)
+    table.cell(d, 8, 3, _d("RS: " + str.tostring(rs_score)), text_color=rs_score >= 70 ? c_pass : c_fail, bgcolor=c_black, text_size=size.small, text_halign=text.align_center, width=W)
     table.merge_cells(d, 8, 3, 9, 3)
 
     // ─── ROW 4: SCORECARD HEADER ────────────────────────────────────────────
@@ -286,9 +286,9 @@ if barstate.islast
         p = array.get(s_pts, i)
         m = array.get(s_max, i)
         pc = p == m ? c_pass : p > 0 ? c_val : c_fail
-        table.cell(d, i, 5, _d(array.get(s_names, i) + " " + str.tostring(p) + "/" + str.tostring(m)), text_color=pc, bgcolor=c_black, text_size=size.normal, text_halign=text.align_center, width=W)
-    table.cell(d, 8, 5, _d(verdict_str), text_color=verdict_color, bgcolor=c_black, text_size=size.normal, text_halign=text.align_center, width=W)
-    table.cell(d, 9, 5, _d("Tier " + conviction), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_center, width=W)
+        table.cell(d, i, 5, _d(array.get(s_names, i) + " " + str.tostring(p) + "/" + str.tostring(m)), text_color=pc, bgcolor=c_black, text_size=size.small, text_halign=text.align_center, width=W)
+    table.cell(d, 8, 5, _d(verdict_str), text_color=verdict_color, bgcolor=c_black, text_size=size.small, text_halign=text.align_center, width=W)
+    table.cell(d, 9, 5, _d("Tier " + conviction), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_center, width=W)
 
     // ─── ROW 6: TRADE PLAN HEADER ───────────────────────────────────────────
     entry_lbl = i_entry_price == 0 ? syminfo.ticker : syminfo.ticker + "  (custom $" + str.tostring(i_entry_price, "#.##") + ")"
@@ -299,58 +299,58 @@ if barstate.islast
     table.merge_cells(d, 8, 6, 9, 6)
 
     // ─── ROW 7: ENTRY / STOP / RISK ────────────────────────────────────────
-    table.cell(d, 0, 7, _d("Entry"),       text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 1, 7, _d("$" + str.tostring(entry_price, "#.##")), text_color=c_white, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 2, 7, _d("Stop"),        text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 3, 7, _d("$" + str.tostring(initial_stop, "#.##") + " (" + str.tostring(stop_pct, "#.#") + "%)"), text_color=c_fail, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 4, 7, _d("R/Share"),     text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 5, 7, _d("$" + str.tostring(r_value, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 6, 7, _d("R:R"),         text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 7, _d("Entry"),       text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 1, 7, _d("$" + str.tostring(entry_price, "#.##")), text_color=c_white, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 2, 7, _d("Stop"),        text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 3, 7, _d("$" + str.tostring(initial_stop, "#.##") + " (" + str.tostring(stop_pct, "#.#") + "%)"), text_color=c_fail, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 4, 7, _d("R/Share"),     text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 5, 7, _d("$" + str.tostring(r_value, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 6, 7, _d("R:R"),         text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
     rr_c = rr_ratio >= 5 ? c_pass : rr_ratio >= 3 ? c_val : c_fail
-    table.cell(d, 7, 7, _d(str.tostring(rr_ratio, "#.#") + " : 1"), text_color=rr_c, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 8, 7, _d("ATR"),         text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 9, 7, _d(str.tostring(stop_mult, "#.#") + "x " + str.tostring(atr_val, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 7, 7, _d(str.tostring(rr_ratio, "#.#") + " : 1"), text_color=rr_c, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 8, 7, _d("ATR"),         text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 9, 7, _d(str.tostring(stop_mult, "#.#") + "x " + str.tostring(atr_val, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
 
     // ─── ROW 8: POSITION SIZING ─────────────────────────────────────────────
     cap_note = is_nav_capped ? " [capped]" : ""
-    table.cell(d, 0, 8, _d("Probe 50%"),   text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 1, 8, _d(str.tostring(shares_probe) + " shs  $" + str.tostring(probe_value, "#,###")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 2, 8, _d("Confirm 30%"), text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 3, 8, _d(str.tostring(shares_confirm) + " shs @ $" + str.tostring(confirm_price, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 4, 8, _d("Load 20%"),    text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 5, 8, _d(str.tostring(shares_load) + " shs @ $" + str.tostring(load_price, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 6, 8, _d("Full"),        text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 7, 8, _d(str.tostring(shares_target) + " shs  $" + str.tostring(full_value, "#,###")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 8, 8, _d(str.tostring(full_pct_nav, "#.#") + "% NAV"), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 9, 8, _d(cap_note),      text_color=c_fail, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 8, _d("Probe 50%"),   text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 1, 8, _d(str.tostring(shares_probe) + " shs  $" + str.tostring(probe_value, "#,###")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 2, 8, _d("Confirm 30%"), text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 3, 8, _d(str.tostring(shares_confirm) + " shs @ $" + str.tostring(confirm_price, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 4, 8, _d("Load 20%"),    text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 5, 8, _d(str.tostring(shares_load) + " shs @ $" + str.tostring(load_price, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 6, 8, _d("Full"),        text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 7, 8, _d(str.tostring(shares_target) + " shs  $" + str.tostring(full_value, "#,###")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 8, 8, _d(str.tostring(full_pct_nav, "#.#") + "% NAV"), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 9, 8, _d(cap_note),      text_color=c_fail, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
 
     // ─── ROW 9: RISK ────────────────────────────────────────────────────────
-    table.cell(d, 0, 9, _d("Risk Probe"),  text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 1, 9, _d("$" + str.tostring(probe_risk, "#,###") + " (" + str.tostring(probe_risk_pct, "#.#") + "% NAV)"), text_color=c_fail, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 2, 9, _d("Risk Full"),   text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 3, 9, _d("$" + str.tostring(full_risk, "#,###") + " (" + str.tostring(full_risk_pct, "#.#") + "% NAV)"), text_color=c_fail, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 4, 9, _d("ADX"),         text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 5, 9, _d(str.tostring(adx_val, "#.#")), text_color=adx_val > 25 ? c_pass : c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 6, 9, _d("Vol Ratio"),   text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 7, 9, _d(str.tostring(vol_ratio, "#.##") + "x"), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 8, 9, _d("RSI(2)"),      text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 9, 9, _d(str.tostring(rsi2, "#.#")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
+    table.cell(d, 0, 9, _d("Risk Probe"),  text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 1, 9, _d("$" + str.tostring(probe_risk, "#,###") + " (" + str.tostring(probe_risk_pct, "#.#") + "% NAV)"), text_color=c_fail, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 2, 9, _d("Risk Full"),   text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 3, 9, _d("$" + str.tostring(full_risk, "#,###") + " (" + str.tostring(full_risk_pct, "#.#") + "% NAV)"), text_color=c_fail, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 4, 9, _d("ADX"),         text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 5, 9, _d(str.tostring(adx_val, "#.#")), text_color=adx_val > 25 ? c_pass : c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 6, 9, _d("Vol Ratio"),   text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 7, 9, _d(str.tostring(vol_ratio, "#.##") + "x"), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 8, 9, _d("RSI(2)"),      text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 9, 9, _d(str.tostring(rsi2, "#.#")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
 
     // ─── ROW 10: EXITS HEADER ───────────────────────────────────────────────
     table.cell(d, 0, 10, _h("EXITS"), text_color=c_white, bgcolor=c_header, text_size=size.small, text_halign=text.align_left, width=W)
     table.merge_cells(d, 0, 10, 9, 10)
 
     // ─── ROW 11: R-STAGE LEVELS ─────────────────────────────────────────────
-    table.cell(d, 0, 11, _d("+1R Breakeven"), text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 1, 11, _d("$" + str.tostring(breakeven_trigger, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 2, 11, _d("+2R Trail 15%"), text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 3, 11, _d("$" + str.tostring(trail_start, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 4, 11, _d("+3R Wide 20%"),  text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 5, 11, _d("$" + str.tostring(wide_trail_start, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 6, 11, _d("Time Stop"),     text_color=c_label, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 7, 11, _d("10 bars < +1R"), text_color=c_val, bgcolor=c_black, text_size=size.normal, text_halign=text.align_left, width=W)
-    table.cell(d, 8, 11, _d(""),              text_color=c_label, bgcolor=c_black, text_size=size.normal, width=W)
-    table.cell(d, 9, 11, _d(""),              text_color=c_label, bgcolor=c_black, text_size=size.normal, width=W)
+    table.cell(d, 0, 11, _d("+1R Breakeven"), text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 1, 11, _d("$" + str.tostring(breakeven_trigger, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 2, 11, _d("+2R Trail 15%"), text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 3, 11, _d("$" + str.tostring(trail_start, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 4, 11, _d("+3R Wide 20%"),  text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 5, 11, _d("$" + str.tostring(wide_trail_start, "#.##")), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 6, 11, _d("Time Stop"),     text_color=c_label, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 7, 11, _d("10 bars < +1R"), text_color=c_val, bgcolor=c_black, text_size=size.small, text_halign=text.align_left, width=W)
+    table.cell(d, 8, 11, _d(""),              text_color=c_label, bgcolor=c_black, text_size=size.small, width=W)
+    table.cell(d, 9, 11, _d(""),              text_color=c_label, bgcolor=c_black, text_size=size.small, width=W)
 
     // ─── ROW 12: VERDICT BAR ────────────────────────────────────────────────
     v_txt = verdict_str + "  |  Score: " + str.tostring(total_score) + "/12  |  Tier: " + conviction + "  |  Template: " + str.tostring(template_score) + "/8  |  Regime: " + regime_str
